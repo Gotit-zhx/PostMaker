@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="{language}">
+<head>
+    <meta charset="UTF-8"><title>{title}</title>
+    <style>
+        body {{ max-width: 800px; margin: 0 auto; padding: 2rem; font-family: -apple-system, sans-serif; line-height: 1.8; color: #333; }}
+        .meta {{ color: #888; font-size: 0.9em; border-bottom: 1px solid #eee; padding-bottom: 1rem; margin-bottom: 2rem; }}
+        h1 {{ font-size: 1.8em; }}
+        pre {{ background: #f5f5f5; padding: 1rem; border-radius: 4px; overflow-x: auto; }}
+        code {{ background: #f0f0f0; padding: 2px 6px; border-radius: 3px; }}
+        pre code {{ background: none; }}
+        blockquote {{ border-left: 4px solid #ddd; padding: 0.5rem 1rem; color: #666; }}
+        img {{ max-width: 100%; }}
+    </style>
+</head>
+<body>
+    <h1>{title}</h1>
+    <div class="meta">{persona_name} | {source} | {generated_at}</div>
+    {html_content}
+</body>
+</html>

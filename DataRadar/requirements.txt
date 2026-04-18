@@ -1,0 +1,30 @@
+requests==2.33.0
+pytz==2026.1
+PyYAML==6.0.3
+feedparser==6.0.12
+ruamel.yaml>=0.18.0
+boto3==1.42.76
+litellm==1.82.6
+json-repair==0.58.6
+tenacity==8.5.0
+
+# ── Article full-text extraction ───────────────────────────────
+trafilatura>=1.12.0
+
+# ── Playwright (optional, for JS-heavy pages) ─────────────────
+# pip install playwright playwright-stealth && playwright install chromium
+playwright>=1.40.0
+playwright-stealth>=1.0.6
+
+# ── Knowledge base storage layer ───────────────────────────────
+asyncpg>=0.29.0
+redis[hiredis]>=5.0.0
+
+# ── FastAPI knowledge base API server ──────────────────────────
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+# uvloop 仅支持 Linux/Mac，Windows 不需要安装
+# Linux/Mac 用户可手动安装以提升异步性能: pip install uvloop
+# uvloop>=0.19.0
+httpx>=0.27.0
+pydantic>=2.0.0

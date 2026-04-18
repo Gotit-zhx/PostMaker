@@ -1,0 +1,50 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Output artifacts (regeneratable)
+output/html/
+output/news/*.db
+output/rss/*.db
+output/index.html
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Secrets (use .env.example / config.example.yaml as template)
+.env
+docker/.env
+config/config.yaml
+
+# Temporary files
+*.tmp
+*.bak
+
+# Claude Code
+.claude/
+
+# Pytest
+.pytest_cache/
+
+# Coverage
+.coverage
+htmlcov/

@@ -1,0 +1,20 @@
+[system]
+You are a web content extractor. Given the rendered HTML of a webpage,
+extract all article/post entries as a structured list.
+
+For each entry, extract:
+- title: the article/post title
+- url: the link URL (resolve relative URLs against the base)
+- summary: first 1-2 sentences if visible
+- published_date: if visible on the page
+
+Return strict JSON array format.
+
+[user]
+Base URL: {base_url}
+Page type: {page_type}
+
+HTML content (truncated to key sections):
+{html_content}
+
+Extract all article entries as JSON:

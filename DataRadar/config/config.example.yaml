@@ -1,0 +1,357 @@
+# ═══════════════════════════════════════════════════════════════
+#                    DataRadar 配置文件
+#                      Version: 1.0.0
+# ═══════════════════════════════════════════════════════════════
+
+
+
+
+# ===============================================================
+# 1. 基础设置
+# ===============================================================
+app:
+  # 时区配置（影响所有时间显示、调度系统判断、数据存储）
+  # 常用时区：
+  #   - Asia/Shanghai (北京时间 UTC+8)
+  #   - America/New_York (美东时间 UTC-5/-4)
+  #   - Europe/London (伦敦时间 UTC+0/+1)
+  # 完整时区列表: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
+  timezone: "Asia/Shanghai"
+  show_version_update: true           # 显示版本更新提示
+
+
+# ===============================================================
+# 2. 数据源 - RSS 订阅
+#
+# 与热榜数据分开存储，按时间流展示
+# 每个源配置：id(唯一标识)、name(显示名称)、url(订阅地址)
+# enabled: 可选，默认 true
+# max_age_days: 可选，覆盖全局 freshness_filter.max_age_days
+# ===============================================================
+rss:
+  enabled: true                       # 是否启用 RSS 抓取
+
+  # 采集阶段全量入库不过滤，过滤在检索/查询时进行
+  feeds:
+    - id: "hacker-news"
+      name: "Hacker News"
+      url: "https://hnrss.org/frontpage"
+      max_age_days: 1
+
+    - id: "ruanyifeng"
+      name: "阮一峰的网络日志"
+      url: "http://www.ruanyifeng.com/blog/atom.xml"
+      enabled: false                  # 禁用
+      max_age_days: 30                # 更新较慢的博客，保留 30 天
+
+    - id: "yahoo-finance"
+      name: "雅虎财经"
+      url: "https://finance.yahoo.com/news/rssindex"
+      max_age_days: 2
+      # 注：Yahoo Finance 响应较慢，需 20-30s
+
+    # ── 英文科技/新闻 RSS ───────────────────────────────────────────
+    - id: "techcrunch"
+      name: "TechCrunch"
+      url: "https://techcrunch.com/feed/"
+      max_age_days: 3
+
+    - id: "theverge"
+      name: "The Verge"
+      url: "https://www.theverge.com/rss/index.xml"
+      max_age_days: 3
+
+    - id: "wired"
+      name: "WIRED"
+      url: "https://www.wired.com/feed/rss"
+      max_age_days: 3
+
+    - id: "ars-technica"
+      name: "Ars Technica"
+      url: "https://feeds.arstechnica.com/arstechnica/index"
+      max_age_days: 3
+
+    - id: "mit-tech-review"
+      name: "MIT Technology Review"
+      url: "https://www.technologyreview.com/feed/"
+      max_age_days: 5
+
+    - id: "reuters-tech"
+      name: "Reuters Technology"
+      url: "https://feeds.reuters.com/reuters/technologyNews"
+      max_age_days: 2
+      enabled: false                  # Reuters 已关闭公开 RSS 服务
+
+    - id: "bbc-tech"
+      name: "BBC Technology"
+      url: "https://feeds.bbci.co.uk/news/technology/rss.xml"
+      max_age_days: 2
+      enabled: false                  # BBC RSS 通过代理 SSL 握手失败
+
+    - id: "openai-blog"
+      name: "OpenAI Blog"
+      url: "https://openai.com/blog/rss.xml"
+      max_age_days: 30
+
+    - id: "anthropic-news"
+      name: "Anthropic News"
+      url: "https://www.anthropic.com/news/rss"
+      max_age_days: 30
+      enabled: false                  # Anthropic 已下线 RSS feed（404）
+
+    - id: "devto"
+      name: "Dev.to"
+      url: "https://dev.to/feed"
+      max_age_days: 3
+
+    # ── RSSHub 生成的 RSS（需运行 RSSHub Docker 服务）──────────────
+    # Reddit/YouTube/ProductHunt 需在 RSSHub 配置 API Key，暂禁用
+    - id: "rsshub-reddit-technology"
+      name: "Reddit r/technology"
+      url: "http://localhost:1200/reddit/subreddit/technology"
+      max_age_days: 2
+      enabled: false                  # 需配置 Reddit API Key
+    - id: "rsshub-reddit-worldnews"
+      name: "Reddit r/worldnews"
+      url: "http://localhost:1200/reddit/subreddit/worldnews"
+      max_age_days: 1
+      enabled: false
+    - id: "rsshub-reddit-artificial"
+      name: "Reddit r/artificial"
+      url: "http://localhost:1200/reddit/subreddit/artificial"
+      max_age_days: 3
+      enabled: false
+    - id: "rsshub-producthunt"
+      name: "Product Hunt Daily"
+      url: "http://localhost:1200/producthunt/today"
+      max_age_days: 2
+      enabled: false                  # 需配置 Product Hunt API Key
+    - id: "rsshub-youtube-trending"
+      name: "YouTube Trending"
+      url: "http://localhost:1200/youtube/trending/US"
+      max_age_days: 1
+      enabled: false                  # 需配置 YouTube API Key
+
+    # ── RSSHub 可用路由（无需 API Key）─────────────────────────────
+    - id: "rsshub-apnews-tech"
+      name: "AP News Technology"
+      url: "http://localhost:1200/apnews/topics/technology"
+      max_age_days: 2
+
+    - id: "rsshub-reuters-world"
+      name: "Reuters World"
+      url: "http://localhost:1200/reuters/world"
+      max_age_days: 2
+
+    - id: "rsshub-solidot"
+      name: "Solidot"
+      url: "http://localhost:1200/solidot"
+      max_age_days: 3
+
+    - id: "rsshub-cnbeta"
+      name: "CNBeta"
+      url: "http://localhost:1200/cnbeta"
+      max_age_days: 2
+
+    - id: "rsshub-cls"
+      name: "财联社 热点"
+      url: "http://localhost:1200/cls/hot"
+      max_age_days: 1
+
+    - id: "rsshub-sspai"
+      name: "少数派 Matrix"
+      url: "http://localhost:1200/sspai/matrix"
+      max_age_days: 5
+
+    # ── 播客 RSS（音频内容）─────────────────────────────────────────
+    - id: "lex-fridman-podcast"
+      name: "Lex Fridman Podcast"
+      url: "https://lexfridman.com/feed/podcast/"
+      content_type: audio
+      max_age_days: 30
+      enabled: false                # 按需启用
+
+    - id: "npr-up-first"
+      name: "NPR Up First"
+      url: "https://feeds.npr.org/500005765/podcast.xml"
+      content_type: audio
+      max_age_days: 3
+      enabled: false                # 按需启用
+
+    # 自定义源示例
+    # - id: "custom-feed"
+    #   name: "自定义源"
+    #   url: "https://example.com/feed.xml"
+    #   enabled: false
+    #   max_age_days: 0               # 示例：禁用过滤，推送所有文章
+
+
+# ===============================================================
+# 4. 存储配置
+# ===============================================================
+storage:
+  backend: "local"                    # 存储后端（local: 本地 SQLite）
+
+  formats:
+    sqlite: true                      # 主存储（必须启用）
+
+  local:
+    data_dir: "output"                # 数据目录
+    retention_days: 0                 # 保留天数（0=永久保留）
+
+
+# ===============================================================
+# 5. AI 模型配置
+#
+# 用于 AI 摘要生成和向量嵌入
+# 基于 LiteLLM 统一接口，支持 100+ AI 提供商
+# ===============================================================
+ai:
+  # LiteLLM 模型格式: provider/model_name
+  # 示例:
+  #   - deepseek/deepseek-chat (DeepSeek)
+  #   - openai/gpt-4o (OpenAI)
+  #   - gemini/gemini-2.5-flash (Google Gemini)
+  #   - anthropic/claude-3-5-sonnet (Anthropic)
+  #   - ollama/llama3 (本地 Ollama)
+  # 完整列表: https://docs.litellm.ai/docs/providers
+  # 如果你对于看英文文档比较头疼，那么可以点击页面右下角的 【Ask AI】 ,用中文询问怎么配置 
+  
+  model: "openai/gpt-5.4"
+
+  api_key: ""                               # 请通过环境变量 AI_API_KEY 设置，或在此填入你的 API Key
+
+  api_base: ""                          # 自定义 API 端点（可选，大多数情况留空）
+                                    # 示例: https://api.openai.com/v1（自建代理或兼容接口）
+                                    #
+                                    # 💡 超级重要：连接任意兼容 OpenAI 协议的模型商
+                                    # 如果你使用的模型商不在上述支持列表中，但提供了兼容 OpenAI 的接口：
+                                    #
+                                    # 1. api_base 填写: 服务商提供的接口地址
+                                    #    例如: https://api.example.com/v1
+                                    #
+                                    # 2. model 填写: "openai/" + 实际模型名称
+                                    #    例如: openai/deepseek-ai/DeepSeek-V3
+                                    #    (原理：前缀 openai/ 强制 LiteLLM 使用 OpenAI 协议格式进行通信)
+
+
+  timeout: 120                      # 请求超时（秒）
+
+  temperature: 1.0                  # 采样温度 (0.0-2.0)
+                                    # 注意：部分模型(如 gpt-5)可能要求必须为 1.0，否则会报错
+  
+  max_tokens: 5000                  # 最大生成 token 数
+                                    # 注意：如果 API 不支持此参数(报 HTTP 400)，请设为 0 以禁用发送
+  # 高级选项
+  num_retries: 1                    # 失败重试次数
+  fallback_models: []               # 备用模型列表（可选）
+                                    # 示例: ["openai/gpt-4o-mini", "openai/deepseek-ai/DeepSeek-V3"]
+
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # 额外参数 (高级选项，一般无需修改)
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # LiteLLM 会自动将通用参数转换为各提供商格式，无需手动适配。
+  # 仅在需要传递特殊参数时启用此项。
+  #
+  # 提示：你可以根据模型 API 文档自行添加任何支持的字段。
+  # 操作：如需启用，请删掉该行最前方的 "# "（井号和空格）。
+  # 注意：如果这几行都带着井号，则代表不使用额外参数（推荐做法）。
+  # -------------------------------------------------------------
+  # extra_params:
+  #   top_p: 1.0              # 核采样（通用）
+  #   presence_penalty: 0.0   # 话题多样性（OpenAI/DeepSeek）
+  #   stop: ["END"]           # 停止词列表（通用）
+
+
+# ===============================================================
+# 6. 高级设置（一般无需修改）
+# ===============================================================
+advanced:
+  debug: false
+
+  # RSS 设置
+  rss:
+    request_interval: 1000            # 请求间隔（毫秒）
+    timeout: 30                       # 请求超时（秒）
+    use_proxy: true                   # 是否使用代理
+    proxy_url: "http://127.0.0.1:7890"  # RSS 代理（留空则直连）
+
+
+# ===============================================================
+# 7. Playwright 网页采集（可选，默认关闭）
+#
+# 用于采集 RSSHub 未覆盖的站点列表页
+# 需安装: pip install playwright playwright-stealth && playwright install chromium
+# ===============================================================
+web_scraper:
+  enabled: true                         # Playwright 网页采集
+  timeout: 30000                        # 页面加载超时（毫秒）
+  min_domain_interval: 10.0             # 每域名最小请求间隔（秒）
+  proxy_url: "http://127.0.0.1:7890"    # 复用 RSS 代理
+  targets:
+    - id: "producthunt"
+      name: "Product Hunt"
+      url: "https://www.producthunt.com"
+      list_selector: "[data-test='post-item']"
+      title_selector: "h3"
+      link_selector: "a[href^='/posts/']"
+      max_items: 30
+
+    - id: "github-trending"
+      name: "GitHub Trending"
+      url: "https://github.com/trending"
+      list_selector: "article.Box-row"
+      title_selector: "h2 a"
+      link_selector: "h2 a"
+      max_items: 25
+
+
+# ===============================================================
+# 8. 知识库配置（PostgreSQL + Redis）
+#
+# 用于将采集数据转存为高性能知识库，供数千智能体并发查询
+# 需要运行 PostgreSQL（含 pgvector 扩展）和 Redis
+# ===============================================================
+knowledge_base:
+  enabled: true                         # 总开关（需先部署 PostgreSQL + Redis）
+
+  # PostgreSQL 连接（支持环境变量）
+  postgres_dsn: "postgresql://dataradar:dataradar_secret@localhost:5432/knowledge_base"
+
+  # Redis 连接（留空则禁用缓存）
+  redis_url: "redis://localhost:6379/0"
+
+  # Embedding 配置（用于语义搜索）
+  embedding:
+    enabled: false
+    # 💡 启用语义搜索：将 enabled 改为 true，并确保 API 支持 /embeddings 端点
+    #
+    # 方式 1：使用 OpenAI 官方 API
+    #   model: "openai/text-embedding-3-small"
+    #   （需要 api_key 对应 OpenAI 官方 Key）
+    #
+    # 方式 2：使用本地 Ollama（免费，无需 API Key）
+    #   model: "ollama/nomic-embed-text"
+    #   （需先运行: ollama pull nomic-embed-text）
+    #   在 ai 部分设置 api_base: "http://localhost:11434"
+    #
+    # 方式 3：使用其他兼容 OpenAI 的 embedding 服务
+    #   model: "openai/你的模型名"
+    #   在 ai 部分设置 api_base: "https://你的服务地址/v1"
+    model: "openai/text-embedding-3-small"
+    batch_size: 50                      # 每批 embedding 的文章数
+    dimensions: 1536                    # 向量维度（text-embedding-3-small = 1536）
+
+  # 全文提取（三引擎：Trafilatura → Playwright → Jina）
+  enricher:
+    enabled: true
+    use_playwright: true                # 是否启用 Playwright 渲染回退
+    jina_api_key: ""                    # 可选，空则用免费额度（20 req/min）
+    rate_limit_per_min: 10              # Jina Reader 请求速率
+
+  # AI 摘要生成（~200 token RAG 检索摘要）
+  summarizer:
+    enabled: true                       # 需要 AI API Key
+    max_tokens: 250                     # 摘要最大 token 数
+    batch_size: 20                      # 每批处理数量
+    skip_if_exists: true                # 已有摘要的条目跳过

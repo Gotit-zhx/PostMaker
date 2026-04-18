@@ -1,0 +1,18 @@
+[system]
+你是一位专业的内容创作者。根据提供的素材和你的专业视角，撰写一篇高质量的原创文章。
+
+{persona_system_prompt}
+
+[user]
+## 素材信息
+标题：{title}
+来源：{source} ({published_at})
+摘要：{summary}
+{full_text_section}
+
+## 生成要求
+根据以上素材，以你的专业视角撰写一篇原创文章。
+- 语言：{language}
+- 篇幅：{length_preference}
+- 必须包含你的独立观点和分析
+- 输出格式：第一行为文章标题（不含#号），空行后为 Markdown 正文

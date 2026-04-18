@@ -1,0 +1,32 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# 切换到中科大 Debian 镜像源（适配 Debian 12 bookworm 的 deb822 格式）
+RUN sed -i 's|http://deb.debian.org|https://mirrors.ustc.edu.cn|g' /etc/apt/sources.list.d/debian.sources \
+    && sed -i 's|http://security.debian.org|https://mirrors.ustc.edu.cn/debian-security|g' /etc/apt/sources.list.d/debian.sources
+
+# 系统依赖：curl 用于健康检查，gcc 用于编译 asyncpg
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        curl \
+        gcc \
+        libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# 配置 pip 使用清华镜像源
+RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple \
+    && pip config set global.trusted-host pypi.tuna.tsinghua.edu.cn
+
+# 安装 Python 依赖
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt \
+    && pip install --no-cache-dir uvloop>=0.19.0
+
+# Copy application source
+COPY api_server/ ./api_server/
+COPY knowledge_base/ ./knowledge_base/
+COPY config/ ./config/
+
+EXPOSE 8000
+
+CMD ["uvicorn", "api_server.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4", "--loop", "uvloop"]
