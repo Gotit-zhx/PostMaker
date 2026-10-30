@@ -121,6 +121,8 @@ docker compose -f docker-compose.public.yml down -v
 
 该 Compose 文件适合单机或小规模部署。当前 workspace 隔离依赖 SQLite 文件，采集任务状态保存在 DataRadar API 进程内存，因此服务固定使用单 worker。多实例、高并发部署需要先把数据仓储加入 workspace 字段或 schema 隔离，并把采集任务迁移到共享队列和持久化状态。
 
+`DataRadar/config/config.example.yaml` 默认关闭本机代理和 Playwright 网页采集，适合云服务器直接启动。需要代理时请显式设置 `advanced.rss.use_proxy`、`advanced.rss.proxy_url` 和 `web_scraper.proxy_url`，不要沿用不存在的 `127.0.0.1:7890` 服务。
+
 ---
 
 ## Docker 全栈部署

@@ -4,9 +4,9 @@
 
 ## 结论
 
-本地 SQLite MVP 已具备从可视化 RSS 配置到内容审核导出的功能闭环：网页可以添加、测试、启停和删除 RSS 源，启动采集并查看状态；素材可由工作台读取，生成草稿后可编辑、修订、批准并导出 Markdown。工作台默认支持匿名开发模式，也可以启用账号、CSRF 和按用户隔离的 SQLite workspace。采集链路使用本机临时 RSS HTTP 服务做过真实 HTTP smoke test；草稿生成使用 mock 验证，没有调用真实 AI API，也没有读取或保存用户提供的 API key。
+本地 SQLite MVP 已具备从可视化 RSS 配置到内容审核导出的功能闭环：网页可以添加、测试、启停和删除 RSS 源，启动采集并查看状态；素材可由工作台读取，生成草稿后可编辑、修订、批准并导出 Markdown。工作台默认支持匿名开发模式，也可以启用账号、CSRF 和按用户隔离的 SQLite workspace。
 
-生产级 PostgreSQL、Redis、pgvector、Playwright 和真实模型调用没有在本次环境启动验证，部署前仍需单独验收。
+2026-10-30 又使用公开 Compose、RSSHub 内网服务和低成本 DeepSeek 模型完成了一次真实用户链路：注册账号、启用 Solidot 推荐来源、采集素材、生成待审核草稿、生成通用平台适配稿并导出 ZIP 发布包。生产级 PostgreSQL、pgvector、Playwright 和多实例部署仍需单独验收。
 
 ## 实际验证链路
 
@@ -18,6 +18,18 @@ GET /health → POST /api/v1/sources/rss/test → POST /api/v1/sources/rss
 ```
 
 Smoke test 最终确认本机 RSS 条目写入 SQLite，并由内容 API 返回。草稿的生成、编辑、批准、修订恢复和导出由工作台 HTTP 集成测试验证，生成器在测试中使用 mock，不访问模型服务。
+
+### 2026-10-30 真实用户体验补充
+
+本次使用公开部署编排 `docker-compose.public.yml`，通过临时账号完成以下流程：
+
+```text
+注册 / 登录 → 启用 RSSHub Solidot → 立即采集 → 浏览素材
+→ 选择“科技评论家” → 生成草稿 → 待审核
+→ 临时批准 → 生成 generic 适配稿 → 导出 ZIP → 恢复待审核
+```
+
+结果：RSSHub 返回 HTTP 200，DataRadar 写入 20 条素材；PostMaker 生成第 2 篇草稿，状态为 `pending_review`，正文约 2544 字符，模型记录为 `deepseek/deepseek-chat`；通用适配接口和 ZIP 发布包均返回 200。文章内容保存在[真实用户体验文章](真实用户体验文章.md)。
 
 启动本地联调环境的命令示例：
 
@@ -65,8 +77,8 @@ DATARADAR_API_BASE=http://127.0.0.1:18000 \
 ## 测试结果
 
 ```text
-DataRadar: 77 passed
-PostMaker: 57 passed, 2 deselected (e2e)
+DataRadar: 81 passed
+PostMaker: 63 passed, 2 deselected (e2e)
 compileall: passed
 git diff --check: passed
 ```
@@ -77,11 +89,12 @@ git diff --check: passed
 
 - PostgreSQL 路径只完成静态检查和单元测试，没有在本机启动真实 PostgreSQL/pgvector。
 - Redis 未配置时健康检查会显示 `redis: unavailable`，但本地 API 仍可工作；生产部署需要 Redis 或调整健康探针策略。
-- 语义搜索需要配置 embedding 模型和 API key，本次没有调用模型。
+- 语义搜索需要配置 embedding 模型和 API key，本次真实体验没有启用 embedding；文章生成使用了低成本对话模型。
 - 工作台支持注册登录、CSRF 和 SQLite workspace 隔离，并已实现发布前的平台适配与来源图片复用；团队权限、并发编辑冲突处理、周期性来源健康检查和平台导出包仍未实现，当前版本仍不适合作为面向公众的托管 SaaS 直接开放。
 - 认证模式下，数据源配置和素材数据库按 workspace 持久化，采集状态仍保存在 DataRadar 单进程内存；Docker Compose 已固定为单 worker，多 worker 部署需要先接入共享任务队列和持久化状态。
 - SQLite 适合单机开发和小规模部署；PostgreSQL 当前仍是单库模型，正式多租户部署前需要加入 workspace 字段或独立 schema。
 - `mark_used` 当前只记录素材与 persona 的关系，尚未在列表响应中展示“已使用”状态。
+- RSSHub 路由依赖上游站点稳定性，推荐来源仍应保留“先测试再启用”的提示；不同路由可能随上游改版失效。
 
 ## 后续改造优先级
 

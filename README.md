@@ -184,15 +184,17 @@ DataRadar 解决“信息从哪里来、如何整理和检索”，PostMaker 解
 
 ## 文档
 
+- [当前状态与任务清单](docs/project-status.md)：已完成工作、真实体验记录、已知问题和下一步优先级
 - [中文操作指南](docs/user-guide.md)：安装、数据源配置、采集、检索、CLI、工作台审核、备份和排障
 - [系统架构](docs/architecture.md) · [REST API 参考](docs/api-reference.md)
 - [部署指南](docs/deployment.md) · [persona 指南](docs/persona-guide.md) · [测试指南](docs/testing.md)
 - [内容闭环改造计划](docs/2026-content-workflow-plan.md)：RSSHub、新手引导、平台适配和图文导出
 - [完整链路审计](docs/full-chain-audit-report.md) · [产品目标](docs/product-goal.md) · [路线图](docs/roadmap.md)
+- [真实用户体验文章](docs/真实用户体验文章.md)：一次从 RSSHub 采集到待审核文章的完整记录
 
 ## 项目状态与限制
 
-当前版本是可在本地运行的 **local-first MVP**。工作台支持匿名本地模式，也可以启用账号登录和按用户隔离的 SQLite 工作区。它不会自动向公众号、知乎、小红书等外部平台发布内容。
+当前版本是可在本地运行的 **local-first MVP**，并已用公开 Compose 完成一次真实用户链路验证。工作台支持匿名本地模式，也可以启用账号登录和按用户隔离的 SQLite 工作区。它不会自动向公众号、知乎、小红书等外部平台发布内容。
 
 认证工作区模式适用于 SQLite 单机部署。PostgreSQL 仓储尚未加入 workspace 隔离，采集任务状态保存在 DataRadar 进程内，团队权限和共享任务队列也尚未实现。因此当前版本不是开箱即用的公网多租户 SaaS；公网部署前请阅读[部署指南](docs/deployment.md)和[完整链路审计](docs/full-chain-audit-report.md)。
 
