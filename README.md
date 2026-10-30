@@ -9,6 +9,8 @@
 
 PostMaker · DataRadar 是一个面向个人创作者和小型内容团队的本地内容情报与生产系统。它把数据采集、全文整理、素材检索、多人设写作、人工审核和 Markdown 导出串成一条工作流，适合搭建个人科技资讯工作台，也适合作为内容自动化产品的技术原型。
 
+如果你第一次接触项目，建议先阅读 [中文操作指南](docs/user-guide.md)，再按本文的“5 分钟启动本地闭环”运行。README 负责说明项目是什么、能做什么以及如何启动；操作指南覆盖配置、日常使用、故障排查和备份。
+
 项目采用 **DataRadar 负责找素材，PostMaker 负责写内容** 的分层设计：采集和生成可以单独运行，也可以通过本地 API 和审核工作台组成完整闭环。
 
 ```text
@@ -31,6 +33,12 @@ PostMaker：persona 匹配 → LLM 生成 → 人工编辑审核 → Markdown / 
 - **人工审核留在闭环里**：生成只是初稿，工作台支持编辑、批准、归档、修订恢复和导出。
 - **本地优先，数据可控**：默认使用 SQLite，配置 PostgreSQL 和 Redis 后可以扩展到更大规模。
 - **模型供应商可替换**：通过 LiteLLM 接入 OpenAI、DeepSeek、兼容 OpenAI 协议的服务或本地模型。
+
+## 项目状态
+
+项目当前是 **local-first MVP**：核心采集、检索、生成、人工审核和导出链路已经可以在单机上运行，适合个人使用、功能评估和二次开发。数据源页面支持在浏览器中完成 RSS 的测试、保存、启停和立即采集。
+
+生产化部署仍需要补齐登录认证、租户权限、共享任务队列、并发编辑冲突处理和外部发布渠道适配。请把当前版本当作可运行的技术底座，不要直接暴露到公网作为无认证 SaaS。
 
 ## 功能
 
@@ -193,6 +201,13 @@ uv run postmaker workbench --port 9000          # 使用其他端口启动工作
 
 模型调用不是运行采集 API 的必要条件。可以先关闭 AI 摘要，验证采集、存储和搜索，再用低成本模型完成筛选和初稿；`--refine` 会增加一次模型调用，建议只对少量重要稿件使用。
 
+## 安全与部署边界
+
+- 通过网页或 API 添加的 RSS 地址会校验协议、端口、域名解析结果和重定向目标，localhost、内网地址、保留地址和带凭据的 URL 会被拒绝。
+- 当前工作台和数据源配置默认是单用户本地模式；DataRadar 的采集任务状态保存在当前进程内。
+- API 默认没有登录认证。需要对外提供服务时，应先接入身份认证、权限控制、HTTPS、限流、审计日志和安全的密钥管理。
+- 不要把 API key 写入 Git 跟踪的 YAML、README、日志或导出的文章；优先使用环境变量或部署平台的密钥存储。
+
 ## 项目结构
 
 ```text
@@ -224,6 +239,27 @@ uv run postmaker workbench --port 9000          # 使用其他端口启动工作
 - [测试指南](docs/testing.md)：测试分层、命令和 Mock 策略
 - [完整链路审计](docs/full-chain-audit-report.md)：当前闭环验证结果和已知限制
 - [产品目标](docs/product-goal.md) · [路线图](docs/roadmap.md)
+
+## 开发与贡献
+
+```bash
+# 创建功能分支
+git switch develop
+git pull --ff-only
+git switch -c feature/<简短描述>
+
+# 完成修改后运行测试
+cd DataRadar && uv run pytest tests/ -q
+cd ../PostMaker && uv run pytest tests/ -q -m "not e2e"
+
+# 提交并合并回 develop（示例）
+git add .
+git commit -m "feat: <变更说明>"
+git switch develop
+git merge --no-ff feature/<简短描述>
+```
+
+提交前请同步更新相关文档，并确认没有把密钥、数据库文件或生成产物加入版本库。
 
 ## 技术栈
 

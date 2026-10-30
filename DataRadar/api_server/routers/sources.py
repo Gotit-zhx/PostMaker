@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field, field_validator
 from dataradar.collector import DataCollector
 from dataradar.core.loader import load_config
 from dataradar.source_manager import SourceManager
+from dataradar.utils.url_safety import UnsafeURL, validate_public_url
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["sources"])
@@ -114,6 +115,10 @@ async def list_sources():
 
 @router.post("/sources/rss", status_code=status.HTTP_201_CREATED)
 async def add_rss_source(request: RSSSourceCreate):
+    try:
+        await asyncio.to_thread(validate_public_url, request.url)
+    except UnsafeURL as exc:
+        raise HTTPException(status_code=422, detail=f"RSS 地址不安全：{exc}") from exc
     manager = _manager()
     try:
         result = await _source_call(
@@ -135,6 +140,10 @@ async def add_rss_source(request: RSSSourceCreate):
 @router.post("/sources/rss/test")
 async def test_rss_url(request: RSSSourceTest):
     """先试读用户填写的 RSS 地址，成功后再保存配置。"""
+    try:
+        await asyncio.to_thread(validate_public_url, request.url)
+    except UnsafeURL as exc:
+        raise HTTPException(status_code=422, detail=f"RSS 地址不安全：{exc}") from exc
     result = await _source_call(_manager().test_feed, request.url)
     if not result.get("success"):
         raise HTTPException(status_code=422, detail=result.get("error", "RSS 测试失败"))

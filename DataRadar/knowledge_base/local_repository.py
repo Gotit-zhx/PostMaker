@@ -4,9 +4,12 @@ import json, os, sqlite3
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Optional
+from dataradar.workspace import workspace_id, workspace_sqlite_path
 
 
 def _path() -> str:
+    if workspace_id() != "default":
+        return str(workspace_sqlite_path())
     return os.getenv(
         "DATARADAR_SQLITE_PATH",
         str(Path(__file__).resolve().parents[1] / "output" / "dataradar.sqlite3"),

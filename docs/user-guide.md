@@ -23,6 +23,19 @@
 → 生成草稿 → 人工编辑 → 批准 → 导出 Markdown
 ```
 
+### 功能地图
+
+| 任务 | 推荐入口 | 结果 |
+|---|---|---|
+| 添加或检查 RSS | 工作台“数据源”页面，或 `dataradar source` | 保存、测试并启停数据源 |
+| 执行采集 | `dataradar fetch`，或工作台“立即采集” | 将条目和可用全文写入知识库 |
+| 找选题 | 工作台“素材发现”，或 `dataradar kb search/trending` | 查看摘要、标签、热度和来源 |
+| 生成初稿 | 工作台，或 `postmaker generate` | 生成 Markdown/HTML 或待审核草稿 |
+| 人工把关 | 工作台编辑器 | 保存修订、批准或归档 |
+| 导出交付 | 工作台导出，或读取 `PostMaker/output/` | 得到可继续发布的 Markdown |
+
+工作台适合完整闭环，CLI 适合批量运行、定时任务和故障排查。两者读取同一套 DataRadar API、persona 和模型配置。
+
 ## 阅读路径
 
 如果你只想先跑通一次，按下面的顺序阅读：
@@ -188,7 +201,11 @@ LiteLLM 模型名使用 `provider/model` 格式。若服务商是 OpenAI 协议�
 
 不要把 API key 提交到 Git，也不要把 key 写入日志、报告或导出的 Markdown。
 
-### 2.4 配置网页采集和代理
+### 2.4 数据源地址的安全限制
+
+网页工作台和 DataRadar API 会拒绝 localhost、内网或保留 IP、非 HTTP(S) 协议、非默认端口以及包含用户名密码的 URL，并逐跳检查 HTTP 重定向。这个限制用于保护部署主机；如果某个公开 RSS 源依赖非标准端口或内部跳转，应先换用公开入口或在可信网络中通过代理访问。
+
+### 2.5 配置网页采集和代理
 
 `web_scraper.enabled` 控制 Playwright 网页采集；`advanced.rss.use_proxy` 和 `advanced.rss.proxy_url` 控制 RSS 请求代理。代理配置示例：
 
@@ -312,6 +329,8 @@ curl http://127.0.0.1:8000/api/v1/content/42
 内容列表使用游标分页：读取响应中的 `meta.next_cursor`，再把它作为下一次请求的 `cursor`。
 
 完整字段、错误码和语义搜索请求体见 [API 参考](api-reference.md)。当前 API 默认没有认证，生产环境应放在带认证和限流的网关后面。
+
+调用数据源管理接口时，RSS 地址必须先通过公开 URL 校验；校验失败通常返回 HTTP 422。采集接口是单实例后台任务，同一进程同时只能运行一个采集任务。
 
 ## 5. 配置 PostMaker
 
