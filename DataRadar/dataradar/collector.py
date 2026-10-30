@@ -53,50 +53,40 @@ class DataCollector:
         self.webhook_enabled = webhook_cfg.get("ENABLED", False) and bool(self.webhook_url)
 
     async def run(self):
-        """运行完整采集管道。"""
+        """运行完整采集管道，并确保任何异常都释放存储资源。"""
         logger.info("=" * 50)
         logger.info("DataRadar 数据采集")
         logger.info("=" * 50)
-
         await self.storage_manager.init()
-
-        rss_data = await self._fetch_rss()
-        web_items = await self._fetch_web_pages()
-
-        if web_items and rss_data:
-            for item in web_items:
-                feed_id = item.feed_id
-                if feed_id not in rss_data.items:
-                    rss_data.items[feed_id] = []
-                rss_data.items[feed_id].append(item)
-                if feed_id not in rss_data.id_to_name:
-                    rss_data.id_to_name[feed_id] = item.feed_name
-
-        if not rss_data or rss_data.get_total_count() == 0:
-            logger.info("[采集] 未获取到任何数据")
-            return
-
-        total = rss_data.get_total_count()
-        logger.info("[采集] 共获取 %d 条内容", total)
-
-        enrich_cfg = self.config.get("KNOWLEDGE_BASE", {}).get("ENRICHER", {})
-        if enrich_cfg.get("ENABLED", False):
-            rss_data = await self._enrich_full_text(rss_data)
-
-        if self.summarizer:
-            rss_data = await self._generate_summaries(rss_data)
-
-        await self.storage_manager.save_rss_data(rss_data)
-
-        kb_cfg = self.config.get("KNOWLEDGE_BASE", {})
-        if kb_cfg.get("EMBEDDING", {}).get("ENABLED", False):
-            await self._run_post_processing()
-
-        if self.webhook_enabled:
-            await self._notify_webhook("collection_complete", {"total": total})
-
-        await self.storage_manager.close()
-        logger.info("[完成] 采集管道执行完毕")
+        try:
+            rss_data = await self._fetch_rss()
+            web_items = await self._fetch_web_pages()
+            if web_items:
+                if rss_data is None:
+                    from dataradar.utils.time import get_configured_time
+                    now = get_configured_time(self.ctx.timezone)
+                    rss_data = RSSData(now.strftime("%Y-%m-%d"), now.strftime("%H:%M"), {}, {})
+                for item in web_items:
+                    rss_data.items.setdefault(item.feed_id, []).append(item)
+                    rss_data.id_to_name.setdefault(item.feed_id, item.feed_name)
+            if not rss_data or rss_data.get_total_count() == 0:
+                logger.info("[采集] 未获取到任何数据")
+                return
+            total = rss_data.get_total_count()
+            logger.info("[采集] 共获取 %d 条内容", total)
+            enrich_cfg = self.config.get("KNOWLEDGE_BASE", {}).get("ENRICHER", {})
+            if enrich_cfg.get("ENABLED", False):
+                rss_data = await self._enrich_full_text(rss_data)
+            if self.summarizer:
+                rss_data = await self._generate_summaries(rss_data)
+            await self.storage_manager.save_rss_data(rss_data)
+            if self.config.get("KNOWLEDGE_BASE", {}).get("EMBEDDING", {}).get("ENABLED", False):
+                await self._run_post_processing()
+            if self.webhook_enabled:
+                await self._notify_webhook("collection_complete", {"total": total})
+            logger.info("[完成] 采集管道执行完毕")
+        finally:
+            await self.storage_manager.close()
 
     async def _fetch_rss(self) -> Optional[RSSData]:
         if not self.ctx.rss_enabled:

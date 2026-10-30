@@ -11,9 +11,11 @@ from fastapi import APIRouter, Query
 from api_server.middleware.cache import cached_response
 from api_server.schemas import StatsOverview, TrendingResponse, ContentItemSummary
 from knowledge_base.repository import ContentRepository
+from knowledge_base.local_repository import LocalContentRepository
+import os
 
 router = APIRouter(prefix="/api/v1/stats", tags=["stats"])
-_repo = ContentRepository()
+_repo = ContentRepository() if os.getenv("POSTGRES_DSN") else LocalContentRepository()
 
 
 @router.get("/overview", response_model=StatsOverview)
@@ -41,7 +43,10 @@ async def get_trending(
     limit: int = Query(default=50, ge=1, le=200),
 ):
     """获取指定日期的热门内容排行。"""
-    target_date = date_str or date.today().isoformat()
+    target_date = date_str
+    if target_date is None and isinstance(_repo, LocalContentRepository):
+        target_date = await _repo.get_latest_date()
+    target_date = target_date or date.today().isoformat()
     rows = await _repo.get_trending(target_date, content_type=content_type, limit=limit)
     items = [
         ContentItemSummary(

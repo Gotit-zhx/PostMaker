@@ -1,5 +1,5 @@
 """
-数据访问服务 — PostgreSQL 后端
+数据访问服务 — PostgreSQL / SQLite 后端
 
 提供 RSS 数据查询接口。
 """
@@ -8,14 +8,33 @@ from datetime import datetime
 from typing import Dict, List, Optional
 
 from .cache_service import get_cache
+import os
+
+
+def _local_item(row: Dict) -> Dict:
+    pub_at = row.get("published_at")
+    return {
+        "title": row.get("title", ""),
+        "feed_id": row.get("feed_id") or "",
+        "feed_name": row.get("feed_name") or row.get("source_platform", ""),
+        "url": row.get("source_url") or "",
+        "published_at": pub_at.isoformat() if hasattr(pub_at, "isoformat") else (pub_at or ""),
+        "author": row.get("author") or "",
+        "date": str(row.get("date_partition") or ""),
+        "fetch_time": str(row.get("crawled_at") or ""),
+    }
 
 
 class DataService:
-    """RSS 数据访问服务（PostgreSQL）"""
+    """RSS 数据访问服务，按环境选择 PostgreSQL 或本地 SQLite。"""
 
     def __init__(self, project_root: str = None):
         self.cache = get_cache()
         self._pool = None
+        self._local = None
+        if not os.getenv("POSTGRES_DSN"):
+            from knowledge_base.local_repository import LocalContentRepository
+            self._local = LocalContentRepository()
 
     async def _get_pool(self):
         if self._pool is None:
@@ -30,6 +49,17 @@ class DataService:
         limit: int = 50,
         include_summary: bool = False,
     ) -> List[Dict]:
+        if self._local:
+            date_str = await self._local.get_latest_date()
+            rows = []
+            for feed in feeds or [None]:
+                rows.extend(await self._local.list_by_date(date_str, platform=f"rss-{feed}" if feed else None, limit=limit))
+            rows.sort(key=lambda r: r.get("published_at") or "", reverse=True)
+            result = [_local_item(r) for r in rows[:limit]]
+            if include_summary:
+                for item, row in zip(result, rows[:limit]):
+                    item["summary"] = row.get("ai_summary") or row.get("summary") or ""
+            return result
         days = min(max(days, 1), 30)
         cache_key = f"latest_rss:{','.join(feeds or [])}:{days}:{limit}:{include_summary}"
         cached = self.cache.get(cache_key, ttl=900)
@@ -91,6 +121,16 @@ class DataService:
         limit: int = 50,
         include_summary: bool = False,
     ) -> List[Dict]:
+        if self._local:
+            rows = await self._local.search_fulltext(keyword, limit=limit)
+            if feeds:
+                allowed = {f"rss-{feed}" for feed in feeds}
+                rows = [r for r in rows if r.get("source_platform") in allowed]
+            result = [_local_item(r) for r in rows[:limit]]
+            if include_summary:
+                for item, row in zip(result, rows[:limit]):
+                    item["summary"] = row.get("ai_summary") or row.get("summary") or ""
+            return result
         cache_key = f"search_rss:{keyword}:{','.join(feeds or [])}:{days}:{limit}:{include_summary}"
         cached = self.cache.get(cache_key, ttl=900)
         if cached:
@@ -145,6 +185,10 @@ class DataService:
         return results
 
     async def get_rss_feeds_status(self) -> Dict:
+        if self._local:
+            result = await self._local.get_feed_status()
+            result["generated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            return result
         cache_key = "rss_feeds_status"
         cached = self.cache.get(cache_key, ttl=900)
         if cached:

@@ -26,6 +26,15 @@ def load_config(config_path: str | None = None) -> Dict[str, Any]:
 
 
 def _apply_env(cfg: Dict[str, Any]) -> None:
+    dataradar = cfg.setdefault("dataradar", {})
+    if os.environ.get("DATARADAR_API_BASE"):
+        dataradar["api_base"] = os.environ["DATARADAR_API_BASE"]
+    if os.environ.get("DATARADAR_TIMEOUT"):
+        try:
+            dataradar["timeout"] = int(os.environ["DATARADAR_TIMEOUT"])
+        except ValueError:
+            pass
+
     ai = cfg.setdefault("ai", {})
     if not ai.get("api_key"):
         ai["api_key"] = os.environ.get("AI_API_KEY", "")

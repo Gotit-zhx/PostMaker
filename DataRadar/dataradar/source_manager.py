@@ -5,6 +5,7 @@
 """
 
 import asyncio
+import os
 import re
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -16,16 +17,30 @@ class SourceManager:
     """管理 config.yaml 中的 RSS 源和 Web 采集目标。"""
 
     def __init__(self, config_path: str = None):
+        module_root = Path(__file__).resolve().parent.parent
         if config_path is None:
-            self.config_path = Path(__file__).parent.parent / "config" / "config.yaml"
+            configured_path = os.environ.get("CONFIG_PATH")
+            if configured_path:
+                candidate = Path(configured_path)
+                if candidate.is_absolute() or candidate.exists():
+                    self.config_path = candidate
+                else:
+                    self.config_path = module_root / candidate
+            else:
+                self.config_path = module_root / "config" / "config.yaml"
         else:
-            self.config_path = Path(config_path)
+            candidate = Path(config_path)
+            self.config_path = candidate if candidate.is_absolute() else Path.cwd() / candidate
 
         self._yaml = YAML()
         self._yaml.preserve_quotes = True
         self._yaml.width = 120
 
     def _load(self):
+        if not self.config_path.exists():
+            raise FileNotFoundError(
+                f"配置文件 {self.config_path} 不存在，请先复制 config/config.example.yaml 为 config/config.yaml"
+            )
         with open(self.config_path, "r", encoding="utf-8") as f:
             return self._yaml.load(f)
 
