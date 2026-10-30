@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 const views = {
   materials: { label: "素材发现", title: "发现值得写的内容", subtitle: "从行业素材开始，生成可审核、可追溯的内容草稿。" },
@@ -56,7 +56,6 @@ function App() {
   const [draftFilter, setDraftFilter] = useState("all");
   const [selectedDraft, setSelectedDraft] = useState(null);
   const [collection, setCollection] = useState({ status: "idle" });
-  const [busy, setBusy] = useState(false);
 
   const notify = useCallback((message) => {
     setToast(message);
@@ -155,7 +154,7 @@ function App() {
           <div className="crumb">工作区 <span>/</span> <b>{page.label}</b></div>
           <div className="topbar-actions">
             <span className="today">{new Date().toLocaleDateString("zh-CN", { year: "numeric", month: "long", day: "numeric" })}</span>
-            <button className="icon-button" onClick={refreshWorkspace} title="刷新工作区">↻</button>
+            <button className="icon-button" onClick={refreshWorkspace} title="刷新工作区" aria-label="刷新工作区">↻</button>
             {user && <span className="user-email">{user.email}</span>}
             {user && <button className="link-button" onClick={async () => { await api("/api/auth/logout", { method: "POST" }); setUser(null); }}>退出</button>}
             <span className="avatar">{initials(user?.email)}</span>
@@ -165,11 +164,11 @@ function App() {
           <div><span className="eyebrow">EDITORIAL WORKFLOW</span><h1>{page.title}</h1><p>{page.subtitle}</p></div>
           {view !== "sources" && <button className="primary-button" onClick={() => setView(view === "materials" ? "drafts" : "materials")}>{view === "materials" ? "查看草稿" : "回到素材"}<span>→</span></button>}
         </section>
-        {view === "materials" && <MaterialsView materials={materials} mode={materialMode} setMode={setMaterialMode} onRefresh={loadMaterials} selected={selectedMaterial} setSelected={setSelectedMaterial} personas={personas} onGenerate={async () => { await loadDrafts(); setView("drafts"); }} firstRun={firstRun} onSetup={() => setView("sources")} />}
+        {view === "materials" && <MaterialsView materials={materials} mode={materialMode} setMode={setMaterialMode} onRefresh={() => loadMaterials().catch((error) => notify(error.message))} notify={notify} selected={selectedMaterial} setSelected={setSelectedMaterial} personas={personas} onGenerate={async () => { await loadDrafts(); setView("drafts"); }} firstRun={firstRun} onSetup={() => setView("sources")} />}
         {view === "drafts" && <DraftsView drafts={drafts} filter={draftFilter} setFilter={setDraftFilter} selected={selectedDraft} setSelected={setSelectedDraft} personas={personas} notify={notify} reload={loadDrafts} />}
         {view === "sources" && <SourcesView sources={sources} setSources={setSources} collection={collection} loadSources={loadSources} loadCollection={loadCollection} notify={notify} />}
       </main>
-      {toast && <div className="toast">{toast}</div>}
+      {toast && <div className="toast" role="status" aria-live="polite">{toast}</div>}
     </div>
   );
 }
@@ -197,19 +196,19 @@ function Brand({ compact = false }) { return <div className={`brand ${compact ? 
 function Sidebar({ view, setView, sourceCount, draftCount }) { return <aside className="sidebar"><Brand /><span className="sidebar-label">工作区</span><NavButton active={view === "materials"} onClick={() => setView("materials")} icon="◈" label="素材库" count={sourceCount ? "" : "—"} /><NavButton active={view === "drafts"} onClick={() => setView("drafts")} icon="▤" label="内容草稿" count={draftCount} /><NavButton active={view === "sources"} onClick={() => setView("sources")} icon="⚙" label="数据源" count={sourceCount} /><div className="sidebar-bottom"><div className="online-indicator"><i /> <span><b>工作区在线</b><small>数据按账号隔离</small></span></div><a href="/api/health" target="_blank" rel="noreferrer">服务状态 ↗</a></div></aside>; }
 function NavButton({ active, onClick, icon, label, count }) { return <button className={`nav-button ${active ? "active" : ""}`} onClick={onClick}><span className="nav-icon">{icon}</span><span>{label}</span>{count !== "" && <em>{count}</em>}</button>; }
 
-function MaterialsView({ materials, mode, setMode, onRefresh, selected, setSelected, personas, onGenerate, firstRun, onSetup }) {
+function MaterialsView({ materials, mode, setMode, onRefresh, notify, selected, setSelected, personas, onGenerate, firstRun, onSetup }) {
   return <>
     {firstRun && <section className="onboarding"><div><span className="eyebrow">GET STARTED</span><h2>三步完成第一篇内容</h2><p>添加 RSS、启动采集，再从素材生成并审核草稿。</p></div><div className="onboarding-steps"><span><b>1</b>配置数据源</span><span><b>2</b>立即采集</span><span><b>3</b>生成并导出</span></div><button className="primary-button" onClick={onSetup}>开始配置 <span>→</span></button></section>}
-    <div className="content-grid"><section className="panel"><div className="panel-heading"><div><h2>行业素材</h2><p>来自 DataRadar 的近期内容</p></div><div className="segmented"><button className={mode === "trending" ? "selected" : ""} onClick={() => setMode("trending")}>热门</button><button className={mode === "recent" ? "selected" : ""} onClick={() => setMode("recent")}>最新</button></div></div><div className="scroll-list">{materials.length ? materials.map((item) => <button key={item.id} className={`list-item material-row ${selected?.id === item.id ? "selected" : ""}`} onClick={async () => setSelected(await api(`/api/materials/${item.id}`))}><strong>{item.title || "未命名素材"}</strong><span><i>{item.source_platform || "未知来源"}</i><i>{formatDate(item.published_at)}</i><b>{item.category || "未分类"}</b><b className="score">重要性 {Number(item.importance_score || 0).toFixed(1)}</b></span></button>) : <EmptyState compact text="暂时没有素材，请先配置 RSS 并启动采集。" />}</div><div className="panel-footer"><span>{materials.length} 条素材 · {mode === "trending" ? "热门" : "最新"}</span><button className="link-button" onClick={onRefresh}>刷新列表 ↻</button></div></section><MaterialDetail material={selected} personas={personas} onGenerate={onGenerate} /></div>
+    <div className="content-grid"><section className="panel"><div className="panel-heading"><div><h2>行业素材</h2><p>来自 DataRadar 的近期内容</p></div><div className="segmented"><button className={mode === "trending" ? "selected" : ""} onClick={() => setMode("trending")}>热门</button><button className={mode === "recent" ? "selected" : ""} onClick={() => setMode("recent")}>最新</button></div></div><div className="scroll-list">{materials.length ? materials.map((item) => <button key={item.id} className={`list-item material-row ${selected?.id === item.id ? "selected" : ""}`} onClick={async () => setSelected(await api(`/api/materials/${item.id}`))}><strong>{item.title || "未命名素材"}</strong><span><i>{item.source_platform || "未知来源"}</i><i>{formatDate(item.published_at)}</i><b>{item.category || "未分类"}</b><b className="score">重要性 {Number(item.importance_score || 0).toFixed(1)}</b></span></button>) : <EmptyState compact text="暂时没有素材，请先配置 RSS 并启动采集。" />}</div><div className="panel-footer"><span>{materials.length} 条素材 · {mode === "trending" ? "热门" : "最新"}</span><button className="link-button" onClick={onRefresh}>刷新列表 ↻</button></div></section><MaterialDetail material={selected} personas={personas} onGenerate={onGenerate} notify={notify} /></div>
   </>;
 }
 
-function MaterialDetail({ material, personas, onGenerate }) {
+function MaterialDetail({ material, personas, onGenerate, notify }) {
   const [personaId, setPersonaId] = useState(personas[0]?.id || "");
   const [loading, setLoading] = useState(false);
   useEffect(() => { if (!personaId && personas[0]) setPersonaId(personas[0].id); }, [personaId, personas]);
   if (!material) return <section className="panel detail-panel"><EmptyState icon="↖" title="选择一条素材" text="查看摘要与原文来源，然后选择 persona 生成初稿。" /></section>;
-  async function generate() { setLoading(true); try { await api("/api/drafts/generate", { method: "POST", body: JSON.stringify({ material_id: Number(material.id), persona_id: personaId }) }); onGenerate(); } catch (error) { window.alert(error.message); } finally { setLoading(false); } }
+  async function generate() { setLoading(true); try { await api("/api/drafts/generate", { method: "POST", body: JSON.stringify({ material_id: Number(material.id), persona_id: personaId }) }); await onGenerate(); } catch (error) { notify(error.message); } finally { setLoading(false); } }
   const sourceUrl = /^https?:\/\//i.test(material.source_url || "") ? material.source_url : "";
   return <section className="panel detail-panel"><div className="detail-kicker">素材详情 <span>·</span> {material.source_platform || "未知来源"} <span>·</span> {formatDate(material.published_at)}</div><h2>{material.title}</h2><div className="chip-row"><span className="chip">{material.category || "未分类"}</span>{(material.tags || []).slice(0, 6).map((tag) => <span className="chip" key={tag}>{tag}</span>)}<span className="chip score">重要性 {Number(material.importance_score || 0).toFixed(1)}</span></div><p className="summary">{material.ai_summary || material.summary || "这条素材暂时没有摘要。"}</p><div className="source-card"><span>原始来源</span>{sourceUrl ? <a href={sourceUrl} target="_blank" rel="noreferrer">{sourceUrl} ↗</a> : <small>未提供有效来源链接</small>}{material.full_text && <p>{material.full_text}</p>}</div><div className="generate-bar"><select value={personaId} onChange={(e) => setPersonaId(e.target.value)} disabled={!personas.length}><option value="">选择写作 persona</option>{personas.map((persona) => <option value={persona.id} key={persona.id}>{persona.name} · {persona.description || persona.id}</option>)}</select><button className="primary-button" disabled={!personaId || loading} onClick={generate}>{loading ? "生成中…" : "生成审核草稿"}<span>→</span></button></div></section>;
 }
