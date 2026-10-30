@@ -7,6 +7,7 @@
 import asyncio
 import os
 import re
+import shutil
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -38,11 +39,17 @@ class SourceManager:
 
     def _load(self):
         if not self.config_path.exists():
-            raise FileNotFoundError(
-                f"配置文件 {self.config_path} 不存在，请先复制 config/config.example.yaml 为 config/config.yaml"
-            )
+            module_example = Path(__file__).resolve().parent.parent / "config" / "config.example.yaml"
+            local_example = self.config_path.with_name("config.example.yaml")
+            example_path = local_example if local_example.exists() else module_example
+            if not example_path.exists():
+                raise FileNotFoundError(
+                    f"配置文件 {self.config_path} 不存在，且未找到 config.example.yaml"
+                )
+            self.config_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(example_path, self.config_path)
         with open(self.config_path, "r", encoding="utf-8") as f:
-            return self._yaml.load(f)
+            return self._yaml.load(f) or {}
 
     def _save(self, data):
         with open(self.config_path, "w", encoding="utf-8") as f:
@@ -57,13 +64,21 @@ class SourceManager:
         s = re.sub(r"-+", "-", s).strip("-")
         return s or "custom-feed"
 
+    @staticmethod
+    def _rss_feeds(data):
+        rss = data.setdefault("rss", {})
+        feeds = rss.get("feeds")
+        if not isinstance(feeds, list):
+            feeds = []
+            rss["feeds"] = feeds
+        return rss, feeds
+
     # ── RSS 源管理 ──────────────────────────────────────────────
 
     def list_feeds(self) -> List[Dict]:
         """列出所有 RSS 源及其状态"""
         data = self._load()
-        rss = data.get("rss", {})
-        feeds = rss.get("feeds", [])
+        _, feeds = self._rss_feeds(data)
 
         result = []
         for feed in feeds:
@@ -88,8 +103,7 @@ class SourceManager:
     ) -> Dict:
         """添加新 RSS 源到 config.yaml"""
         data = self._load()
-        rss = data.get("rss", {})
-        feeds = rss.get("feeds", [])
+        rss, feeds = self._rss_feeds(data)
 
         if not name:
             name = url.split("//")[-1].split("/")[0]
@@ -120,8 +134,7 @@ class SourceManager:
     def remove_feed(self, feed_id: str) -> bool:
         """从 config.yaml 删除 RSS 源"""
         data = self._load()
-        rss = data.get("rss", {})
-        feeds = rss.get("feeds", [])
+        rss, feeds = self._rss_feeds(data)
 
         original_len = len(feeds)
         rss["feeds"] = [f for f in feeds if f.get("id") != feed_id]
@@ -142,8 +155,7 @@ class SourceManager:
 
     def _set_feed_enabled(self, feed_id: str, enabled: bool) -> bool:
         data = self._load()
-        rss = data.get("rss", {})
-        feeds = rss.get("feeds", [])
+        _, feeds = self._rss_feeds(data)
 
         for feed in feeds:
             if feed.get("id") == feed_id:
@@ -164,8 +176,7 @@ class SourceManager:
 
         if not id_or_url.startswith(("http://", "https://")):
             data = self._load()
-            rss = data.get("rss", {})
-            feeds = rss.get("feeds", [])
+            _, feeds = self._rss_feeds(data)
             found = None
             for f in feeds:
                 if f.get("id") == id_or_url:

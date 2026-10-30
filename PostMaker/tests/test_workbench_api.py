@@ -178,3 +178,42 @@ async def test_materials_reports_dataradar_failure(tmp_path, monkeypatch, person
         response = await client.get("/api/materials")
     assert response.status_code == 502
     assert "DataRadar" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_source_and_collection_proxy_endpoints(monkeypatch):
+    calls = []
+
+    async def fake_request(method, path, **kwargs):
+        calls.append((method, path, kwargs))
+        if path == "/api/v1/sources":
+            return {"items": [], "count": 0}
+        if path == "/api/v1/collect/status":
+            return {"status": "completed", "job_id": "job-1"}
+        return {"ok": True}
+
+    monkeypatch.setattr(workbench_app, "_dataradar_request", fake_request)
+    transport = httpx.ASGITransport(app=workbench_app.app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        assert (await client.get("/api/sources")).json()["count"] == 0
+        assert (await client.post("/api/sources/rss", json={"url": "https://example.com/feed.xml"})).status_code == 201
+        assert (await client.post("/api/sources/rss/test", json={"url": "https://example.com/feed.xml"})).status_code == 200
+        assert (await client.post("/api/sources/demo/test")).status_code == 200
+        assert (await client.post("/api/sources/demo/enable")).status_code == 200
+        assert (await client.post("/api/sources/demo/disable")).status_code == 200
+        assert (await client.delete("/api/sources/demo")).status_code == 200
+        assert (await client.post("/api/collect")).status_code == 202
+        assert (await client.get("/api/collect/status")).json()["status"] == "completed"
+
+    paths = [path for _, path, _ in calls]
+    assert paths == [
+        "/api/v1/sources",
+        "/api/v1/sources/rss",
+        "/api/v1/sources/rss/test",
+        "/api/v1/sources/demo/test",
+        "/api/v1/sources/demo/enable",
+        "/api/v1/sources/demo/disable",
+        "/api/v1/sources/demo",
+        "/api/v1/collect",
+        "/api/v1/collect/status",
+    ]
