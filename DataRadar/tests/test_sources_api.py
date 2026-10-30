@@ -58,6 +58,9 @@ class FakeManager:
 def client(monkeypatch):
     manager = FakeManager()
     monkeypatch.setattr(sources, "_manager", lambda: manager)
+    # The route-level lifecycle test uses a fake manager and should not depend
+    # on the host's DNS configuration; URL policy has dedicated unit tests.
+    monkeypatch.setattr(sources, "validate_public_url", lambda value: value)
     transport = httpx.ASGITransport(app=app)
     return httpx.AsyncClient(transport=transport, base_url="http://test")
 

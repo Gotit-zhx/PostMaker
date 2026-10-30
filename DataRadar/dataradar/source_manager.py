@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from ruamel.yaml import YAML
+from dataradar.workspace import workspace_config_path, workspace_id
 
 
 class SourceManager:
@@ -27,6 +28,8 @@ class SourceManager:
                     self.config_path = candidate
                 else:
                     self.config_path = module_root / candidate
+            elif workspace_id() != "default":
+                self.config_path = workspace_config_path()
             else:
                 self.config_path = module_root / "config" / "config.yaml"
         else:

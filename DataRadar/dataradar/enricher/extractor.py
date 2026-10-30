@@ -24,6 +24,7 @@ from typing import Callable, Dict, List, Optional
 
 import requests as _requests
 import urllib3
+from dataradar.utils.url_safety import UnsafeURL, validate_public_url, validate_redirect
 
 logger = logging.getLogger(__name__)
 
@@ -54,11 +55,19 @@ def _sync_download_html(url: str, proxy_url: str = "", timeout: int = 20) -> Opt
             kwargs["proxies"] = {"http": proxy_url, "https": proxy_url}
             kwargs["verify"] = False
             urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-        resp = _requests.get(url, **kwargs)
+        current_url = validate_public_url(url)
+        for redirect_count in range(6):
+            resp = _requests.get(current_url, allow_redirects=False, **kwargs)
+            if resp.status_code not in {301, 302, 303, 307, 308}:
+                break
+            location = resp.headers.get("location")
+            if not location or redirect_count == 5:
+                return None
+            current_url = validate_redirect(current_url, location)
         if resp.status_code == 200:
             return resp.text
         return None
-    except (_requests.RequestException, OSError, urllib3.exceptions.HTTPError) as exc:
+    except (_requests.RequestException, OSError, urllib3.exceptions.HTTPError, UnsafeURL) as exc:
         logger.debug("下载 %s 失败: %s", url, exc)
         return None
 
@@ -107,6 +116,12 @@ class ArticleExtractor:
         if not url or not url.startswith("http"):
             return ExtractResult(url=url, text="", method="failed")
 
+        try:
+            await asyncio.to_thread(validate_public_url, url)
+        except UnsafeURL as exc:
+            logger.warning("跳过不安全的文章地址 %s: %s", url, exc)
+            return ExtractResult(url=url, text="", method="blocked")
+
         text = await asyncio.to_thread(_sync_trafilatura_extract, url, self._proxy_url)
         if text:
             return self._build_result(url, text, "trafilatura")
@@ -134,7 +149,18 @@ class ArticleExtractor:
         if not urls:
             return results
 
-        valid_urls = [u for u in urls if u and u.startswith("http")]
+        candidates = [u for u in urls if u and u.startswith("http")]
+
+        async def check_url(url: str) -> Optional[str]:
+            try:
+                return await asyncio.to_thread(validate_public_url, url)
+            except UnsafeURL as exc:
+                logger.warning("跳过不安全的文章地址 %s: %s", url, exc)
+                results[url] = ExtractResult(url=url, text="", method="blocked")
+                return None
+
+        checked = await asyncio.gather(*[check_url(url) for url in candidates])
+        valid_urls = [url for url in checked if url]
         done_count = 0
         total = len(valid_urls)
 
