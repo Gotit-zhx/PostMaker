@@ -8,6 +8,21 @@ const views = {
 
 const statusLabels = { pending_review: "待审核", approved: "已批准", archived: "已归档" };
 
+const iconPaths = {
+  library: <><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5v-15Z" /><path d="M4 20.5A2.5 2.5 0 0 1 6.5 18H20M8 7h8M8 11h6" /></>,
+  draft: <><path d="m6 3 12 0a2 2 0 0 1 2 2v14l-8-3-8 3V5a2 2 0 0 1 2-2Z" /><path d="M8 7h8M8 11h8" /></>,
+  source: <><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-1.8 1.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-2.5V20a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1-1.8-1.8.1-.1A1.7 1.7 0 0 0 8 15a1.7 1.7 0 0 0-1.6-1H6v-2.5h.4a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1 1.8-1.8.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.6V5h2.5v.4a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1 1.8 1.8-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.4V14h-.4a1.7 1.7 0 0 0-1.6 1Z" /></>,
+  refresh: <><path d="M20 11a8 8 0 0 0-14.6-4L4 9" /><path d="M4 4v5h5M4 13a8 8 0 0 0 14.6 4L20 15" /><path d="M20 20v-5h-5" /></>,
+  arrow: <><path d="M5 12h14M13 6l6 6-6 6" /></>,
+  spark: <><path d="m12 3 1.3 5.7L19 10l-5.7 1.3L12 17l-1.3-5.7L5 10l5.7-1.3L12 3Z" /><path d="m19 16 .6 2.4L22 19l-2.4.6L19 22l-.6-2.4L16 19l2.4-.6L19 16Z" /></>,
+  shield: <><path d="M12 3 20 6v5c0 5-3.4 8.4-8 10-4.6-1.6-8-5-8-10V6l8-3Z" /><path d="m8.5 12 2.2 2.2 4.8-5" /></>,
+  external: <><path d="M14 5h5v5M19 5l-8 8" /><path d="M18 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" /></>,
+};
+
+function Icon({ name, size = 18, strokeWidth = 1.8 }) {
+  return <svg className="icon" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{iconPaths[name]}</svg>;
+}
+
 function cookie(name) {
   return document.cookie.split("; ").find((part) => part.startsWith(`${name}=`))?.slice(name.length + 1) || "";
 }
@@ -151,22 +166,23 @@ function App() {
       <Sidebar view={view} setView={setView} sourceCount={sources.length} draftCount={drafts.length} />
       <main className="main-content">
         <header className="topbar">
-          <div className="crumb">工作区 <span>/</span> <b>{page.label}</b></div>
+          <div className="crumb"><span className="crumb-kicker">WORKSPACE</span><span className="crumb-divider">/</span><b>{page.label}</b></div>
           <div className="topbar-actions">
-            <span className="today">{new Date().toLocaleDateString("zh-CN", { year: "numeric", month: "long", day: "numeric" })}</span>
-            <button className="icon-button" onClick={refreshWorkspace} title="刷新工作区" aria-label="刷新工作区">↻</button>
+            <span className="today"><i />实时工作区 · {new Date().toLocaleDateString("zh-CN", { month: "long", day: "numeric" })}</span>
+            <button className="icon-button" onClick={refreshWorkspace} title="刷新工作区" aria-label="刷新工作区"><Icon name="refresh" size={16} /></button>
             {user && <span className="user-email">{user.email}</span>}
-            {user && <button className="link-button" onClick={async () => { await api("/api/auth/logout", { method: "POST" }); setUser(null); }}>退出</button>}
+            {user && <button className="link-button logout-button" onClick={async () => { await api("/api/auth/logout", { method: "POST" }); setUser(null); }}>退出</button>}
             <span className="avatar">{initials(user?.email)}</span>
           </div>
         </header>
         <section className="page-heading">
-          <div><span className="eyebrow">EDITORIAL WORKFLOW</span><h1>{page.title}</h1><p>{page.subtitle}</p></div>
-          {view !== "sources" && <button className="primary-button" onClick={() => setView(view === "materials" ? "drafts" : "materials")}>{view === "materials" ? "查看草稿" : "回到素材"}<span>→</span></button>}
+          <div className="heading-copy"><div className="heading-kicker"><span className="eyebrow">EDITORIAL WORKFLOW</span><span className="heading-dot" /> <span>{view === "materials" ? "DISCOVER" : view === "drafts" ? "REVIEW" : "CONNECT"}</span></div><h1>{page.title}</h1><p>{page.subtitle}</p></div>
+          <div className="heading-actions">{view !== "sources" && <button className="primary-button" onClick={() => setView(view === "materials" ? "drafts" : "materials")}>{view === "materials" ? "查看草稿" : "回到素材"}<Icon name="arrow" size={15} /></button>}<span className="heading-meta"><Icon name="shield" size={15} /> 私密工作区</span></div>
         </section>
         {view === "materials" && <MaterialsView materials={materials} mode={materialMode} setMode={setMaterialMode} onRefresh={() => loadMaterials().catch((error) => notify(error.message))} notify={notify} selected={selectedMaterial} setSelected={setSelectedMaterial} personas={personas} onGenerate={async () => { await loadDrafts(); setView("drafts"); }} firstRun={firstRun} onSetup={() => setView("sources")} />}
         {view === "drafts" && <DraftsView drafts={drafts} filter={draftFilter} setFilter={setDraftFilter} selected={selectedDraft} setSelected={setSelectedDraft} personas={personas} notify={notify} reload={loadDrafts} />}
         {view === "sources" && <SourcesView sources={sources} setSources={setSources} collection={collection} loadSources={loadSources} loadCollection={loadCollection} notify={notify} />}
+        <footer className="page-footer"><span><strong>postmaker</strong> · 内容情报与生产工作台</span><span>DataRadar connected <i /></span></footer>
       </main>
       {toast && <div className="toast" role="status" aria-live="polite">{toast}</div>}
     </div>
@@ -188,13 +204,13 @@ function AuthScreen({ onSuccess }) {
       await onSuccess(data.user);
     } catch (err) { setError(err.message); } finally { setSubmitting(false); }
   }
-  return <div className="auth-screen"><div className="auth-card"><Brand compact /><span className="eyebrow">PRIVATE WORKSPACE</span><h1>{register ? "创建你的内容工作区" : "欢迎回来"}</h1><p>{register ? "注册后，你的 RSS、素材和草稿会保存在独立工作区。" : "登录后继续管理你的内容生产流程。"}</p><form onSubmit={submit} className="auth-form"><label>邮箱<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" /></label><label>密码<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} minLength="8" required autoComplete={register ? "new-password" : "current-password"} /></label>{error && <div className="form-error">{error}</div>}<button className="primary-button full" disabled={submitting}>{submitting ? "处理中…" : register ? "注册并进入" : "登录工作台"}</button></form><button className="link-button auth-switch" onClick={() => { setRegister(!register); setError(""); }}>{register ? "已有账号？登录" : "还没有账号？创建工作区"}</button></div></div>;
+  return <div className="auth-screen"><div className="auth-orbit orbit-one" /><div className="auth-orbit orbit-two" /><div className="auth-layout"><section className="auth-intro"><div className="auth-badge"><Icon name="spark" size={15} /> PRIVATE CONTENT OS</div><h1>把灵感变成<br /><em>可以交付的内容。</em></h1><p>从信息采集、选题判断到人工审核，让每一次发布都更有依据。</p><div className="auth-proof"><span><b>01</b>发现值得写的内容</span><span><b>02</b>用 persona 生成草稿</span><span><b>03</b>审核后安心交付</span></div></section><div className="auth-card"><Brand compact /><span className="eyebrow">PRIVATE WORKSPACE</span><h2>{register ? "创建你的内容工作区" : "欢迎回来"}</h2><p>{register ? "注册后，你的 RSS、素材和草稿会保存在独立工作区。" : "登录后继续管理你的内容生产流程。"}</p><form onSubmit={submit} className="auth-form"><label>邮箱<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" placeholder="you@example.com" /></label><label>密码<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} minLength="8" required autoComplete={register ? "new-password" : "current-password"} placeholder="至少 8 位字符" /></label>{error && <div className="form-error">{error}</div>}<button className="primary-button full" disabled={submitting}>{submitting ? "处理中…" : register ? "注册并进入" : "登录工作台"}<Icon name="arrow" size={15} /></button></form><button className="link-button auth-switch" onClick={() => { setRegister(!register); setError(""); }}>{register ? "已有账号？登录" : "还没有账号？创建工作区"}</button></div></div></div>;
 }
 
 function Brand({ compact = false }) { return <div className={`brand ${compact ? "brand-compact" : ""}`}><span className="brand-mark">P</span><span><strong>postmaker</strong><small>CONTENT STUDIO</small></span></div>; }
 
-function Sidebar({ view, setView, sourceCount, draftCount }) { return <aside className="sidebar"><Brand /><span className="sidebar-label">工作区</span><NavButton active={view === "materials"} onClick={() => setView("materials")} icon="◈" label="素材库" count={sourceCount ? "" : "—"} /><NavButton active={view === "drafts"} onClick={() => setView("drafts")} icon="▤" label="内容草稿" count={draftCount} /><NavButton active={view === "sources"} onClick={() => setView("sources")} icon="⚙" label="数据源" count={sourceCount} /><div className="sidebar-bottom"><div className="online-indicator"><i /> <span><b>工作区在线</b><small>数据按账号隔离</small></span></div><a href="/api/health" target="_blank" rel="noreferrer">服务状态 ↗</a></div></aside>; }
-function NavButton({ active, onClick, icon, label, count }) { return <button className={`nav-button ${active ? "active" : ""}`} onClick={onClick}><span className="nav-icon">{icon}</span><span>{label}</span>{count !== "" && <em>{count}</em>}</button>; }
+function Sidebar({ view, setView, sourceCount, draftCount }) { return <aside className="sidebar"><div className="sidebar-top"><Brand /><div className="workspace-switcher"><span className="workspace-avatar">P</span><span><b>个人工作区</b><small>Private workspace</small></span><span className="switcher-chevron">⌄</span></div></div><div className="sidebar-nav"><span className="sidebar-label">工作区导航</span><NavButton active={view === "materials"} onClick={() => setView("materials")} icon="library" label="素材库" hint="发现" count={sourceCount ? "" : "—"} /><NavButton active={view === "drafts"} onClick={() => setView("drafts")} icon="draft" label="内容草稿" hint="审核" count={draftCount} /><NavButton active={view === "sources"} onClick={() => setView("sources")} icon="source" label="数据源" hint="连接" count={sourceCount} /></div><div className="sidebar-bottom"><div className="online-indicator"><i /><span><b>工作区在线</b><small>数据按账号隔离</small></span></div><a href="/api/health" target="_blank" rel="noreferrer"><Icon name="external" size={13} /> 服务状态</a><div className="sidebar-version">POSTMAKER 0.1 · LOCAL FIRST</div></div></aside>; }
+function NavButton({ active, onClick, icon, label, hint, count }) { return <button className={`nav-button ${active ? "active" : ""}`} onClick={onClick}><span className="nav-icon"><Icon name={icon} size={18} /></span><span className="nav-copy"><b>{label}</b><small>{hint}</small></span>{count !== "" && <em>{count}</em>}<span className="nav-arrow">↗</span></button>; }
 
 function MaterialsView({ materials, mode, setMode, onRefresh, notify, selected, setSelected, personas, onGenerate, firstRun, onSetup }) {
   return <>
