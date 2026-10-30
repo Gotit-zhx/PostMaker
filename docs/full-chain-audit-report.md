@@ -4,13 +4,22 @@
 
 ## 结论
 
-本地 SQLite 链路已经可以闭环运行：采集数据写入 DataRadar，REST API 能够列表、详情、搜索、趋势和统计，PostMaker 能读取素材、生成草稿、保存修订、人工批准并导出 Markdown。生成环节使用 mock 验证，没有调用真实 AI API，也没有读取或保存用户提供的 API key。
+单用户本地 SQLite MVP 已具备从可视化 RSS 配置到内容审核导出的功能闭环：网页可以添加、测试、启停和删除 RSS 源，启动采集并查看状态；素材可由工作台读取，生成草稿后可编辑、修订、批准并导出 Markdown。采集链路使用本机临时 RSS HTTP 服务做过真实 HTTP smoke test；草稿生成使用 mock 验证，没有调用真实 AI API，也没有读取或保存用户提供的 API key。
 
 生产级 PostgreSQL、Redis、pgvector、Playwright 和真实模型调用没有在本次环境启动验证，部署前仍需单独验收。
 
 ## 实际验证链路
 
-使用临时 SQLite 数据库和 fixture RSS 数据验证采集器编排（关闭真实网络抓取、AI 和 Playwright），再启动 API 与工作台：
+使用临时 SQLite 数据库和本机临时 RSS HTTP 服务验证数据源配置、RSS 解析、采集任务和内容 API：
+
+```text
+GET /health → POST /api/v1/sources/rss/test → POST /api/v1/sources/rss
+→ POST /api/v1/collect → GET /api/v1/collect/status → GET /api/v1/content
+```
+
+Smoke test 最终确认本机 RSS 条目写入 SQLite，并由内容 API 返回。草稿的生成、编辑、批准、修订恢复和导出由工作台 HTTP 集成测试验证，生成器在测试中使用 mock，不访问模型服务。
+
+启动本地联调环境的命令示例：
 
 ```bash
 DATARADAR_SQLITE_PATH=/tmp/dataradar-e2e.sqlite3 \
@@ -29,6 +38,8 @@ DATARADAR_API_BASE=http://127.0.0.1:18000 \
 - PostMaker `/api/health`、persona 列表、素材列表、素材详情和草稿列表。
 - `DataCollector.run()` 执行 fixture 采集、SQLite 持久化并关闭存储连接；随后 DataRadar API `/api/v1/content` 能读取该采集结果。
 - 工作台测试覆盖：生成草稿 → 待审核 → 编辑 → 批准 → Markdown 导出 → 修订恢复。
+- 工作台代理测试覆盖：数据源列表、新增和测试 RSS、已保存源测试、启停、删除、立即采集和状态查询。
+- DataRadar 数据源测试覆盖：源生命周期、URL 校验、首次访问时从模板初始化配置、`CONFIG_PATH` 读取以及采集重复触发保护。
 - `dataradar rss --status`、`--search` 和默认查询在 SQLite 模式下均可运行。
 
 ## 已修复问题
@@ -53,20 +64,21 @@ DATARADAR_API_BASE=http://127.0.0.1:18000 \
 ## 测试结果
 
 ```text
-DataRadar: 56 passed
-PostMaker: 53 passed, 2 skipped
+DataRadar: 61 passed
+PostMaker: 54 passed, 2 deselected (e2e)
 compileall: passed
 git diff --check: passed
 ```
 
-真实 HTTP 联调中，DataRadar `/api/v1/content` 和 PostMaker `/api/materials` 返回了同一批素材；`mark_used` 返回 200，统计和趋势默认日期为 `2026-10-30`。
+临时本机 RSS HTTP smoke test 返回：RSS 测试成功 1 条、采集状态 `completed`、内容列表包含写入的素材。DataRadar API 测试和 PostMaker 工作台测试全量通过。
 
 ## 当前限制和风险
 
 - PostgreSQL 路径只完成静态检查和单元测试，没有在本机启动真实 PostgreSQL/pgvector。
 - Redis 未配置时健康检查会显示 `redis: unavailable`，但本地 API 仍可工作；生产部署需要 Redis 或调整健康探针策略。
 - 语义搜索需要配置 embedding 模型和 API key，本次没有调用模型。
-- 工作台目前是单用户本地审核工具，没有登录、权限、并发编辑冲突处理和发布平台适配。
+- 工作台目前是单用户本地审核工具，没有注册登录、租户隔离、团队权限、并发编辑冲突处理和发布平台适配；当前版本不能直接作为面向公众的托管 SaaS 开放使用。
+- 数据源配置当前写入服务端 YAML，采集状态保存在 DataRadar 单进程内存。要支持多个用户独立配置与并发使用，需要迁移至按用户隔离的持久化存储和共享任务队列。
 - SQLite 适合单机开发和小规模部署；多进程高并发采集应切换 PostgreSQL。
 - `mark_used` 当前只记录素材与 persona 的关系，尚未在列表响应中展示“已使用”状态。
 
@@ -96,4 +108,4 @@ git diff --check: passed
 
 ## 建议的下一步
 
-先把本地闭环部署成一个可重复的 Docker Compose 环境，再补 PostgreSQL/Redis 集成测试；随后实现“素材推荐解释 + 重复生成拦截 + 发布队列”三项能力。这三项能同时提升可靠性、人工效率和产品可售卖性。
+公开上线前的 P0 是身份认证和租户隔离、按用户持久化 RSS 与模型配置、秘密管理、SSRF/URL 安全策略、共享采集队列、部署与备份演练。之后再把本地闭环部署成可重复的 Docker Compose 环境、补 PostgreSQL/Redis 集成测试，并实现素材推荐解释、重复生成拦截和发布队列。
