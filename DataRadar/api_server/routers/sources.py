@@ -83,6 +83,12 @@ class RSSSourceTest(BaseModel):
         return value
 
 
+class RSSSourceUpdate(RSSSourceCreate):
+    """编辑已保存的 RSS 源；源 ID 通过路径固定，不允许静默变化。"""
+
+    id: None = None
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -140,6 +146,32 @@ async def add_rss_source(request: RSSSourceCreate):
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except (OSError, KeyError) as exc:
         logger.exception("添加 RSS 源失败")
+        raise HTTPException(status_code=500, detail=f"保存数据源配置失败：{exc}") from exc
+    return {"kind": "rss", **result}
+
+
+@router.put("/sources/rss/{source_id}")
+async def update_rss_source(source_id: str, request: RSSSourceUpdate):
+    try:
+        await asyncio.to_thread(validate_public_url, request.url)
+    except UnsafeURL as exc:
+        raise HTTPException(status_code=422, detail=f"RSS 地址不安全：{exc}") from exc
+    manager = _manager()
+    try:
+        result = await _source_call(
+            manager.update_feed,
+            source_id,
+            request.url,
+            name=request.name,
+            max_age_days=request.max_age_days,
+            enabled=request.enabled,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc).strip("'")) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except (OSError, TypeError) as exc:
+        logger.exception("更新 RSS 源失败")
         raise HTTPException(status_code=500, detail=f"保存数据源配置失败：{exc}") from exc
     return {"kind": "rss", **result}
 

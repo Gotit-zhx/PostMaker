@@ -56,3 +56,42 @@ def test_source_manager_source_lifecycle(tmp_path):
     assert manager.remove_source("example") is True
     assert manager.list_feeds() == []
 
+
+def test_source_manager_generates_unique_ids_for_non_ascii_names(tmp_path):
+    config_path = tmp_path / "config.yaml"
+    write_config(config_path)
+    manager = SourceManager(str(config_path))
+
+    first = manager.add_feed("https://example.com/a.xml", name="科技资讯")
+    second = manager.add_feed("https://example.com/b.xml", name="科技资讯")
+
+    assert first["id"] == "example-com"
+    assert second["id"] == "example-com-2"
+    assert [item["id"] for item in manager.list_feeds()] == ["example-com", "example-com-2"]
+
+
+def test_source_manager_updates_feed_and_enables_rss(tmp_path):
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text("rss:\n  enabled: false\n  feeds: []\n", encoding="utf-8")
+    manager = SourceManager(str(config_path))
+
+    manager.add_feed("https://example.com/feed.xml", id="example", name="Example")
+    result = manager.update_feed(
+        "example",
+        "https://example.com/updated.xml",
+        name="Updated",
+        max_age_days=10,
+        enabled=True,
+    )
+
+    assert result["status"] == "updated"
+    assert manager.list_feeds() == [{
+        "id": "example",
+        "name": "Updated",
+        "url": "https://example.com/updated.xml",
+        "enabled": True,
+        "max_age_days": 10,
+        "content_type": "text",
+    }]
+    assert "enabled: true" in config_path.read_text(encoding="utf-8")
+

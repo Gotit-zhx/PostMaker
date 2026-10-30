@@ -197,6 +197,7 @@ async def test_source_and_collection_proxy_endpoints(monkeypatch):
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         assert (await client.get("/api/sources")).json()["count"] == 0
         assert (await client.post("/api/sources/rss", json={"url": "https://example.com/feed.xml"})).status_code == 201
+        assert (await client.put("/api/sources/rss/demo", json={"url": "https://example.com/updated.xml"})).status_code == 200
         assert (await client.post("/api/sources/rss/test", json={"url": "https://example.com/feed.xml"})).status_code == 200
         assert (await client.post("/api/sources/demo/test")).status_code == 200
         assert (await client.post("/api/sources/demo/enable")).status_code == 200
@@ -209,6 +210,7 @@ async def test_source_and_collection_proxy_endpoints(monkeypatch):
     assert paths == [
         "/api/v1/sources",
         "/api/v1/sources/rss",
+        "/api/v1/sources/rss/demo",
         "/api/v1/sources/rss/test",
         "/api/v1/sources/demo/test",
         "/api/v1/sources/demo/enable",

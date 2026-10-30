@@ -1,4 +1,4 @@
-const state = { view: "materials", mode: "trending", materials: [], personas: [], selectedMaterial: null, drafts: [], draftCount: 0, selectedDraft: null, revisionsOpen: false, sources: [], collectionPoll: null, user: null };
+const state = { view: "materials", mode: "trending", materials: [], personas: [], selectedMaterial: null, drafts: [], draftCount: 0, selectedDraft: null, revisionsOpen: false, sources: [], editingSource: null, collectionPoll: null, user: null };
 const $ = (selector) => document.querySelector(selector);
 const escapeHtml = (value = "") => String(value).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
 const niceDate = (value) => { if (!value) return "时间未知"; const date = new Date(value); return Number.isNaN(date.getTime()) ? String(value).slice(0, 10) : date.toLocaleDateString("zh-CN", { month: "short", day: "numeric" }); };
@@ -45,7 +45,8 @@ function sourceStatusLabel(source) { return source.enabled ? "已启用" : "已�
 function renderSources() {
   const host = $("#source-list"); $("#source-count").textContent = state.sources.length; $("#source-meta").textContent = `${state.sources.length} 个数据源 · RSS 可视化配置`;
   if (!state.sources.length) { host.innerHTML = '<div class="empty-inline">还没有数据源。<br>在右侧填写一个 RSS 地址开始采集。</div>'; return; }
-  host.innerHTML = state.sources.map((source) => `<div class="source-item"><div class="source-item-main"><div class="source-item-title"><span class="source-dot ${source.enabled ? "on" : "off"}"></span>${escapeHtml(source.name || source.id)}<span class="source-kind">${source.kind === "rss" ? "RSS" : "Web"}</span></div><div class="source-item-url">${escapeHtml(source.url || "")}</div><div class="source-item-meta">${sourceStatusLabel(source)} · ${source.kind === "rss" ? `最近 ${Number(source.max_age_days || 0)} 天` : "网页目标"}</div></div><div class="source-actions"><button class="small-button" data-source-test="${escapeHtml(source.id)}">测试</button><button class="small-button" data-source-toggle="${escapeHtml(source.id)}" data-enabled="${source.enabled}">${source.enabled ? "停用" : "启用"}</button><button class="small-button danger" data-source-delete="${escapeHtml(source.id)}">删除</button></div></div>`).join("");
+  host.innerHTML = state.sources.map((source) => `<div class="source-item"><div class="source-item-main"><div class="source-item-title"><span class="source-dot ${source.enabled ? "on" : "off"}"></span>${escapeHtml(source.name || source.id)}<span class="source-kind">${source.kind === "rss" ? "RSS" : "Web"}</span></div><div class="source-item-url">${escapeHtml(source.url || "")}</div><div class="source-item-meta">${sourceStatusLabel(source)} · ${source.kind === "rss" ? `最近 ${Number(source.max_age_days || 0)} 天` : "网页目标"}</div></div><div class="source-actions">${source.kind === "rss" ? `<button class="small-button" data-source-edit="${escapeHtml(source.id)}">编辑</button>` : ""}<button class="small-button" data-source-test="${escapeHtml(source.id)}">测试</button><button class="small-button" data-source-toggle="${escapeHtml(source.id)}" data-enabled="${source.enabled}">${source.enabled ? "停用" : "启用"}</button><button class="small-button danger" data-source-delete="${escapeHtml(source.id)}">删除</button></div></div>`).join("");
+  host.querySelectorAll("[data-source-edit]").forEach((button) => button.addEventListener("click", () => editSource(button.dataset.sourceEdit)));
   host.querySelectorAll("[data-source-test]").forEach((button) => button.addEventListener("click", () => testSavedSource(button.dataset.sourceTest, button)));
   host.querySelectorAll("[data-source-toggle]").forEach((button) => button.addEventListener("click", () => toggleSource(button.dataset.sourceToggle, button.dataset.enabled === "true")));
   host.querySelectorAll("[data-source-delete]").forEach((button) => button.addEventListener("click", () => deleteSource(button.dataset.sourceDelete)));
@@ -58,7 +59,33 @@ async function loadSources() {
 }
 function sourcePayload() {
   const id = $("#source-id").value.trim();
-  return { ...(id ? { id } : {}), name: $("#source-name").value.trim(), url: $("#source-url").value.trim(), max_age_days: Number($("#source-age").value || 0), enabled: true };
+  return { ...(id ? { id } : {}), name: $("#source-name").value.trim(), url: $("#source-url").value.trim(), max_age_days: Number($("#source-age").value || 0), enabled: state.editingSource ? Boolean(state.editingSource.enabled) : true };
+}
+function resetSourceForm() {
+  state.editingSource = null;
+  $("#source-form").reset();
+  $("#source-age").value = "3";
+  $("#source-id").disabled = false;
+  $("#source-form-title").textContent = "添加 RSS 源";
+  $("#source-form-help").textContent = "只需要填写名称和 RSS 地址，不必编辑 YAML";
+  $("#save-source").textContent = "保存并启用";
+  $("#cancel-source-edit").classList.add("hidden");
+  showSourceTestResult("");
+}
+function editSource(sourceId) {
+  const source = state.sources.find((item) => item.id === sourceId);
+  if (!source || source.kind !== "rss") return;
+  state.editingSource = source;
+  $("#source-id").value = source.id;
+  $("#source-id").disabled = true;
+  $("#source-name").value = source.name || "";
+  $("#source-url").value = source.url || "";
+  $("#source-age").value = String(source.max_age_days ?? 3);
+  $("#source-form-title").textContent = "编辑 RSS 源";
+  $("#source-form-help").textContent = "修改后会立即用于下一次采集，源 ID 保持不变。";
+  $("#save-source").textContent = "保存修改";
+  $("#cancel-source-edit").classList.remove("hidden");
+  $("#source-url").focus();
 }
 function showSourceTestResult(message, success = false) { const node = $("#source-test-result"); node.textContent = message; node.className = `form-result ${success ? "success" : "error"}`; }
 async function testNewSource() {
@@ -69,7 +96,19 @@ async function testNewSource() {
 }
 async function saveSource(event) {
   event.preventDefault(); const button = $("#source-form button[type=submit]"); button.disabled = true;
-  try { await api("/api/sources/rss", { method: "POST", body: JSON.stringify(sourcePayload()) }); toast("数据源已保存并启用"); $("#source-form").reset(); $("#source-age").value = "3"; showSourceTestResult(""); await loadSources(); }
+  try {
+    const payload = sourcePayload();
+    if (state.editingSource) {
+      delete payload.id;
+      await api(`/api/sources/rss/${encodeURIComponent(state.editingSource.id)}`, { method: "PUT", body: JSON.stringify(payload) });
+      toast("数据源修改已保存");
+    } else {
+      await api("/api/sources/rss", { method: "POST", body: JSON.stringify(payload) });
+      toast("数据源已保存并启用");
+    }
+    resetSourceForm();
+    await loadSources();
+  }
   catch (error) { showSourceTestResult(`保存失败：${error.message}`); }
   finally { button.disabled = false; }
 }
@@ -169,7 +208,7 @@ async function boot() {
   document.querySelectorAll(".nav-item").forEach((button) => button.addEventListener("click", () => setView(button.dataset.view)));
   $("#toggle-view").addEventListener("click", () => setView(state.view === "materials" ? "drafts" : "materials"));
   $("#refresh").addEventListener("click", () => state.view === "materials" ? loadMaterials() : state.view === "drafts" ? loadDrafts() : loadSources());
-  $("#load-more").addEventListener("click", loadMaterials); $("#refresh-drafts").addEventListener("click", loadDrafts); $("#refresh-sources").addEventListener("click", loadSources); $("#collect-now").addEventListener("click", collectNow); $("#test-source").addEventListener("click", testNewSource); $("#source-form").addEventListener("submit", saveSource); $("#setup-sources").addEventListener("click", () => setView("sources"));
+  $("#load-more").addEventListener("click", loadMaterials); $("#refresh-drafts").addEventListener("click", loadDrafts); $("#refresh-sources").addEventListener("click", loadSources); $("#collect-now").addEventListener("click", collectNow); $("#test-source").addEventListener("click", testNewSource); $("#source-form").addEventListener("submit", saveSource); $("#cancel-source-edit").addEventListener("click", resetSourceForm); $("#setup-sources").addEventListener("click", () => setView("sources"));
   $("#status-filter").addEventListener("change", loadDrafts);
   document.querySelectorAll("[data-mode]").forEach((button) => button.addEventListener("click", () => { state.mode = button.dataset.mode; document.querySelectorAll("[data-mode]").forEach((item) => item.classList.toggle("selected", item === button)); loadMaterials(); }));
   $("#auth-form").addEventListener("submit", submitAuth);

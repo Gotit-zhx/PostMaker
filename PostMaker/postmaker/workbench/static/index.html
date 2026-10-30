@@ -66,14 +66,14 @@
           <div class="panel-footer"><span id="source-meta">—</span><button id="collect-now" class="button primary compact">立即采集</button></div>
         </section>
         <section class="panel settings-panel">
-          <div class="panel-header"><div><h2>添加 RSS 源</h2><p>只需要填写名称和 RSS 地址，不必编辑 YAML</p></div></div>
+          <div class="panel-header"><div><h2 id="source-form-title">添加 RSS 源</h2><p id="source-form-help">只需要填写名称和 RSS 地址，不必编辑 YAML</p></div></div>
           <form id="source-form" class="settings-form">
             <div class="form-help">RSS 是网站提供的订阅地址，通常以 <code>.xml</code>、<code>/feed</code> 或 <code>/rss</code> 结尾。</div>
             <label>源名称 <span class="optional">可选，留空自动使用网站名称</span><input id="source-name" maxlength="200" placeholder="例如：少数派"></label>
             <label>RSS 地址<input id="source-url" type="url" maxlength="2000" placeholder="https://example.com/feed.xml" required></label>
             <label>源 ID <span class="optional">可选，留空自动生成</span><input id="source-id" maxlength="80" pattern="[A-Za-z0-9][A-Za-z0-9_-]*" placeholder="例如：sspai"></label>
             <label>保留最近多少天的文章<input id="source-age" type="number" min="0" max="3650" value="3"><span class="field-hint">填 0 表示不按时间过滤。</span></label>
-            <div class="form-actions"><button type="button" id="test-source" class="button secondary">测试地址</button><button type="submit" class="button primary">保存并启用</button></div>
+            <div class="form-actions"><button type="button" id="test-source" class="button secondary">测试地址</button><button type="button" id="cancel-source-edit" class="button secondary hidden">取消编辑</button><button type="submit" id="save-source" class="button primary">保存并启用</button></div>
             <div id="source-test-result" class="form-result" role="status"></div>
           </form>
         </section>
