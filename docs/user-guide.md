@@ -1,6 +1,17 @@
 # PostMaker · DataRadar 操作指南
 
-这份指南面向第一次运行项目的使用者，覆盖从安装、配置、采集素材，到生成、审核和导出的完整流程。项目包含两个服务：
+这是一份面向第一次运行项目使用者的完整操作手册。你可以把它当作从零开始的安装教程，也可以直接跳到需要的章节查命令、查配置或排查问题。
+
+这份指南覆盖：
+
+- 安装两个子项目并选择 SQLite 或 PostgreSQL 运行模式
+- 配置 RSS / Web 数据源和可选的 AI 摘要
+- 启动 DataRadar API、执行采集、搜索和查看素材
+- 配置 PostMaker persona，使用 CLI 或网页工作台生成草稿
+- 人工编辑、保存修订、批准、归档和导出 Markdown
+- 日常运行、备份、测试和常见故障排查
+
+项目包含两个服务：
 
 - **DataRadar** 负责发现和整理素材，提供 CLI、SQLite/PostgreSQL 存储和 REST API。
 - **PostMaker** 负责按 persona 生成内容，提供 CLI、本地输出和审核工作台。
@@ -11,6 +22,47 @@
 配置数据源 → DataRadar fetch → 查看 / 搜索素材 → PostMaker 匹配 persona
 → 生成草稿 → 人工编辑 → 批准 → 导出 Markdown
 ```
+
+## 阅读路径
+
+如果你只想先跑通一次，按下面的顺序阅读：
+
+1. [准备环境](#1-准备环境)
+2. [配置 DataRadar](#2-配置-dataradar)
+3. [运行 DataRadar](#3-运行-dataradar)
+4. [配置 PostMaker](#5-配置-postmaker)
+5. [使用审核工作台完成闭环](#7-使用审核工作台完成闭环)
+
+如果你已经能看到素材，可以直接从 [用 CLI 生成内容](#6-用-cli-生成内容) 开始。当前工作台是单用户本地工具，RSS 源仍通过 DataRadar CLI 或 YAML 配置，网页内自助配置和登录隔离属于后续路线图。
+
+## 0. 先理解一次完整操作
+
+一次最小闭环需要两个终端：
+
+```text
+终端 A：启动 DataRadar API（保持运行）
+终端 B：执行采集 → 启动 PostMaker 工作台 → 浏览器审核
+```
+
+最短命令序列如下。详细解释和可选配置见后续章节：
+
+```bash
+# 终端 A
+cd DataRadar
+uv run uvicorn api_server.main:app --host 127.0.0.1 --port 8000
+
+# 终端 B
+cd DataRadar
+uv run dataradar fetch
+
+cd ../PostMaker
+export DATARADAR_API_BASE="http://127.0.0.1:8000"
+export AI_API_KEY="your-api-key"
+export AI_MODEL="deepseek/deepseek-chat"
+uv run postmaker workbench
+```
+
+打开 `http://127.0.0.1:8787` 后，选择素材、生成草稿、编辑并批准，最后点击导出 Markdown。模型调用只发生在摘要或生成步骤；采集、存储和浏览素材可以先不配置 AI。
 
 ## 1. 准备环境
 
