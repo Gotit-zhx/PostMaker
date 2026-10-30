@@ -8,12 +8,40 @@ reserved and non-routable destinations.
 from __future__ import annotations
 
 import ipaddress
+import os
 import socket
 from urllib.parse import urljoin, urlsplit
 
 
 class UnsafeURL(ValueError):
     """Raised when a URL does not point to a public HTTP(S) destination."""
+
+
+def _rsshub_base_urls() -> tuple[str, ...]:
+    value = os.getenv("RSSHUB_BASE_URL", "").strip()
+    return tuple(item.strip().rstrip("/") for item in value.split(",") if item.strip())
+
+
+def _is_trusted_rsshub_url(url: str, base_urls: tuple[str, ...]) -> bool:
+    if not base_urls:
+        return False
+    try:
+        candidate = urlsplit(url)
+    except ValueError:
+        return False
+    if candidate.username or candidate.password or not candidate.hostname:
+        return False
+    candidate_base = f"{candidate.scheme.lower()}://{candidate.netloc.lower()}"
+    for base in base_urls:
+        parsed_base = urlsplit(base)
+        if parsed_base.scheme.lower() != candidate.scheme.lower():
+            continue
+        if parsed_base.netloc.lower() != candidate_base.split("://", 1)[1]:
+            continue
+        base_path = parsed_base.path.rstrip("/")
+        if not base_path or candidate.path == base_path or candidate.path.startswith(f"{base_path}/"):
+            return True
+    return False
 
 
 def validate_public_url(
@@ -60,6 +88,21 @@ def validate_public_url(
     return value
 
 
+def validate_rss_url(
+    url: str,
+    *,
+    resolver=socket.getaddrinfo,
+) -> str:
+    """Validate a feed URL, allowing only the explicitly configured RSSHub base."""
+    value = (url or "").strip()
+    if _is_trusted_rsshub_url(value, _rsshub_base_urls()):
+        parsed = urlsplit(value)
+        if parsed.scheme.lower() not in {"http", "https"} or parsed.username or parsed.password:
+            raise UnsafeURL("RSSHub 地址格式无效")
+        return value
+    return validate_public_url(value, resolver=resolver)
+
+
 def validate_redirect(
     base_url: str,
     location: str,
@@ -68,3 +111,13 @@ def validate_redirect(
 ) -> str:
     """Resolve relative redirects and apply the same public destination policy."""
     return validate_public_url(urljoin(base_url, location), resolver=resolver)
+
+
+def validate_rss_redirect(
+    base_url: str,
+    location: str,
+    *,
+    resolver=socket.getaddrinfo,
+) -> str:
+    """Resolve a feed redirect while preserving the RSSHub allowlist."""
+    return validate_rss_url(urljoin(base_url, location), resolver=resolver)

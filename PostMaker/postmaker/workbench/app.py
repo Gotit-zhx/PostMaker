@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import html
+import io
+import json
 import os
 from pathlib import Path
+import zipfile
 from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Query, Request
-from fastapi.responses import FileResponse, PlainTextResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, PlainTextResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -19,6 +23,8 @@ from postmaker.workbench.store import WorkbenchStore
 from postmaker.workbench.auth import AuthStore, auth_required, workspace_signature
 from postmaker.workbench.workspace import reset_workspace, set_workspace_id, workspace_id
 from postmaker.content.generator import ContentGenerator
+from postmaker.workbench.platforms import adapt_draft, list_platforms
+from postmaker.workbench.source_presets import get_source_preset, list_source_presets
 import httpx
 
 _STATIC = Path(__file__).parent / "static"
@@ -104,6 +110,10 @@ class DraftUpdate(BaseModel):
 
 class RestoreRequest(BaseModel):
     revision_id: int = Field(gt=0)
+
+
+class AdaptRequest(BaseModel):
+    platform: str = Field(min_length=1, max_length=40)
 
 
 def _personas():
@@ -200,6 +210,26 @@ async def _dataradar_request(method: str, path: str, **kwargs):
         raise HTTPException(status_code=exc.response.status_code, detail=detail) from exc
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=502, detail=f"无法连接 DataRadar ({api_base})：{exc}") from exc
+
+
+@app.get("/api/platforms")
+async def platforms():
+    return {"items": list_platforms()}
+
+
+@app.get("/api/source-presets")
+async def source_presets():
+    return {"items": list_source_presets()}
+
+
+@app.post("/api/source-presets/{preset_id}/enable", status_code=201)
+async def enable_source_preset(preset_id: str):
+    preset = get_source_preset(preset_id)
+    if not preset:
+        raise HTTPException(status_code=404, detail="找不到来源预置")
+    payload = {"id": preset["id"], "name": preset["name"], "url": preset["url"],
+               "max_age_days": preset.get("max_age_days", 3), "enabled": True}
+    return await _dataradar_request("POST", "/api/v1/sources/rss", json=payload)
 
 
 @app.get("/api/sources")
@@ -355,6 +385,19 @@ async def update_draft(draft_id: int, update: DraftUpdate):
     return draft
 
 
+@app.post("/api/drafts/{draft_id}/adapt")
+async def adapt_draft_for_platform(draft_id: int, request: AdaptRequest):
+    draft = _store().get_draft(draft_id)
+    if not draft:
+        raise HTTPException(status_code=404, detail="找不到这篇草稿")
+    if draft["status"] != "approved":
+        raise HTTPException(status_code=409, detail="只有已批准的草稿可以适配平台")
+    try:
+        return adapt_draft(draft, request.platform)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
 @app.get("/api/drafts/{draft_id}/revisions")
 async def revisions(draft_id: int):
     if not _store().get_draft(draft_id):
@@ -370,13 +413,43 @@ async def restore_revision(draft_id: int, request: RestoreRequest):
     return draft
 
 
-@app.get("/api/drafts/{draft_id}/export.md", response_class=PlainTextResponse)
-async def export_markdown(draft_id: int):
+def _approved_draft(draft_id: int) -> dict:
     draft = _store().get_draft(draft_id)
     if not draft:
         raise HTTPException(status_code=404, detail="找不到这篇草稿")
     if draft["status"] != "approved":
         raise HTTPException(status_code=409, detail="只有已批准的草稿可以导出")
+    return draft
+
+
+@app.get("/api/drafts/{draft_id}/export.html", response_class=PlainTextResponse)
+async def export_html(draft_id: int):
+    draft = _approved_draft(draft_id)
+    adapted = adapt_draft(draft, "wechat")
+    content = "<!doctype html><html lang=\"zh-CN\"><meta charset=\"utf-8\"><title>" + html.escape(draft["title"]) + "</title><body>" + adapted["html"] + "</body></html>"
+    return PlainTextResponse(content, media_type="text/html", headers={"Content-Disposition": f'attachment; filename="draft-{draft_id}.html"'})
+
+
+@app.get("/api/drafts/{draft_id}/export-package")
+async def export_package(draft_id: int, platform: str = "generic"):
+    draft = _approved_draft(draft_id)
+    try:
+        adapted = adapt_draft(draft, platform)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    memory = io.BytesIO()
+    with zipfile.ZipFile(memory, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("draft.md", f"# {draft['title']}\n\n{draft['body']}\n")
+        archive.writestr("publish.txt", adapted.get("caption") or adapted.get("plain_body") or adapted.get("body") or "")
+        archive.writestr("publish.json", json.dumps(adapted, ensure_ascii=False, indent=2))
+        archive.writestr("media-manifest.json", json.dumps({"items": adapted.get("media", []), "note": "图片保留原始 URL，未在服务器下载。"}, ensure_ascii=False, indent=2))
+    memory.seek(0)
+    return Response(memory.getvalue(), media_type="application/zip", headers={"Content-Disposition": f'attachment; filename="draft-{draft_id}-{platform}.zip"'})
+
+
+@app.get("/api/drafts/{draft_id}/export.md", response_class=PlainTextResponse)
+async def export_markdown(draft_id: int):
+    draft = _approved_draft(draft_id)
     material = draft["material"]
     safe_title = draft["title"].replace('"', '\\"')
     source = material.get("source_url") or ""

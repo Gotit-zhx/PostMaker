@@ -21,11 +21,12 @@ from pydantic import BaseModel, Field, field_validator
 from dataradar.collector import DataCollector
 from dataradar.core.loader import load_config
 from dataradar.source_manager import SourceManager
-from dataradar.utils.url_safety import UnsafeURL, validate_public_url
+from dataradar.utils.url_safety import UnsafeURL, validate_rss_url
 from dataradar.workspace import workspace_id
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["sources"])
+validate_public_url = validate_rss_url
 
 _SOURCE_LOCK = threading.RLock()
 _collection_tasks: dict[str, asyncio.Task] = {}

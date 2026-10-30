@@ -4,7 +4,13 @@ import socket
 
 import pytest
 
-from dataradar.utils.url_safety import UnsafeURL, validate_public_url, validate_redirect
+from dataradar.utils.url_safety import (
+    UnsafeURL,
+    validate_public_url,
+    validate_redirect,
+    validate_rss_redirect,
+    validate_rss_url,
+)
 
 
 def _public_dns(host, port, *, type):
@@ -45,3 +51,15 @@ def test_redirect_cannot_escape_to_private_network():
 
 def test_relative_redirect_is_resolved_and_checked():
     assert validate_redirect("https://feed.example/rss", "/new-feed", resolver=_public_dns) == "https://feed.example/new-feed"
+
+
+def test_rsshub_base_can_be_internal_when_explicitly_configured(monkeypatch):
+    monkeypatch.setenv("RSSHUB_BASE_URL", "http://rsshub:1200")
+    assert validate_rss_url("http://rsshub:1200/github/trending", resolver=_private_dns) == "http://rsshub:1200/github/trending"
+    assert validate_rss_redirect("http://rsshub:1200/github/trending", "/github/explore", resolver=_private_dns) == "http://rsshub:1200/github/explore"
+
+
+def test_rsshub_allowlist_does_not_open_other_internal_hosts(monkeypatch):
+    monkeypatch.setenv("RSSHUB_BASE_URL", "http://rsshub:1200")
+    with pytest.raises(UnsafeURL):
+        validate_rss_url("http://dataradar:8000/health", resolver=_private_dns)

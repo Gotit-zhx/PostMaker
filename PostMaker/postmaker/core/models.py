@@ -14,6 +14,9 @@ class Material(BaseModel):
     title: str
     source_platform: str = ""
     source_url: str = ""
+    thumbnail_url: str = ""
+    media_url: str = ""
+    image_urls: List[str] = Field(default_factory=list)
     published_at: Optional[datetime] = None
     summary: Optional[str] = None
     full_text: Optional[str] = None
