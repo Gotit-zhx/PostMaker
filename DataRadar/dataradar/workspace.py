@@ -9,6 +9,8 @@ import hmac
 from contextvars import ContextVar
 from pathlib import Path
 
+import yaml
+
 _WORKSPACE_ID = ContextVar("dataradar_workspace_id", default="default")
 _VALID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{7,95}$")
 
@@ -37,6 +39,32 @@ def workspace_root() -> Path:
 
 def workspace_config_path() -> Path:
     return workspace_root() / "config.yaml"
+
+
+def ensure_workspace_config() -> Path:
+    """Create an isolated first-run config without copying shared sources.
+
+    A hosted workspace must never fall back to the repository-level config: that
+    would expose another user's RSS definitions and could trigger collection of
+    sources the new user did not choose. The example keeps the runtime defaults,
+    while feeds and web targets start empty for self-service setup.
+    """
+    path = workspace_config_path()
+    if path.exists():
+        return path
+    module_root = Path(__file__).resolve().parents[1]
+    example = module_root / "config" / "config.example.yaml"
+    if not example.exists():
+        raise FileNotFoundError(f"配置模板不存在：{example}")
+    data = yaml.safe_load(example.read_text(encoding="utf-8")) or {}
+    data.setdefault("rss", {})["feeds"] = []
+    data.setdefault("web_scraper", {})["targets"] = []
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        yaml.safe_dump(data, allow_unicode=True, sort_keys=False),
+        encoding="utf-8",
+    )
+    return path
 
 
 def workspace_sqlite_path() -> Path:
