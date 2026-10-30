@@ -16,7 +16,7 @@ import httpx
 from .parser import RSSParser
 from dataradar.storage.base import RSSItem, RSSData
 from dataradar.utils.time import get_configured_time, is_within_days, DEFAULT_TIMEZONE
-from dataradar.utils.url_safety import UnsafeURL, validate_public_url, validate_redirect
+from dataradar.utils.url_safety import UnsafeURL, validate_rss_redirect, validate_rss_url
 
 logger = logging.getLogger(__name__)
 
@@ -143,7 +143,7 @@ class RSSFetcher:
             ) as client:
                 current_url = feed.url
                 for redirect_count in range(6):
-                    current_url = await asyncio.to_thread(validate_public_url, current_url)
+                    current_url = await asyncio.to_thread(validate_rss_url, current_url)
                     response = await client.get(current_url)
                     if response.status_code not in {301, 302, 303, 307, 308}:
                         break
@@ -152,7 +152,7 @@ class RSSFetcher:
                         response.raise_for_status()
                     if redirect_count == 5:
                         raise ValueError("RSS 地址重定向次数过多")
-                    current_url = await asyncio.to_thread(validate_redirect, current_url, location)
+                    current_url = await asyncio.to_thread(validate_rss_redirect, current_url, location)
                 response.raise_for_status()
 
             parsed_items = await asyncio.to_thread(self.parser.parse, response.text, current_url)

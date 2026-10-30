@@ -16,7 +16,7 @@ cp .env.example .env     # 首次：编辑 .env 填入密码和 API Key
 docker compose up postgres redis -d
 ```
 
-可选启动 RSSHub 代理：
+公开 Compose 现在默认包含一个仅在内部网络可访问的 RSSHub 和 Redis 缓存。它用于把预置来源转换成 RSS，不会直接把 1200 端口暴露给公网。
 
 ```bash
 docker compose up postgres redis rsshub -d
@@ -153,7 +153,7 @@ docker compose -f docker-compose.public.yml down -v
 |------|------|------|------|
 | postgres | pgvector/pgvector:pg16 | 5432 | PostgreSQL 16 + pgvector 扩展 |
 | redis | redis:7-alpine | 6379 | 缓存，512MB LRU 策略 |
-| rsshub | diygod/rsshub:latest | 1200 | RSSHub 代理（可选） |
+| rsshub | diygod/rsshub:latest | 1200 | RSSHub 代理（可选，仅 Docker 内网） |
 | api-server | 自构建 | 8000（内部） | FastAPI 单 worker + uvloop |
 | nginx | nginx:alpine | 8000（外部） | 反向代理 |
 
@@ -208,6 +208,7 @@ docker compose up postgres redis rsshub -d
 | `POSTMAKER_WORKSPACES_DIR` | 否 | `output/workspaces` | 工作台草稿数据库根目录 |
 | `POSTMAKER_COOKIE_SECURE` | HTTPS 时必填 | `false` | 设置后浏览器仅通过 HTTPS 发送 session cookie |
 | `WORKSPACE_AUTH_SECRET` | 多用户时必填 | — | 与 DataRadar 使用相同的强随机密钥 |
+| `RSSHUB_SOURCE_BASE_URL` | RSSHub 预置来源时需要 | `http://localhost:1200` | 工作台生成推荐 RSSHub URL 的地址；公开 Compose 使用 `http://rsshub:1200` |
 
 ### 多用户 SQLite 部署
 

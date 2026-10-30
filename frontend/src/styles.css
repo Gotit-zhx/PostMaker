@@ -294,3 +294,43 @@ button { cursor: pointer; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
 }
+
+/* Recommended sources and platform publishing panel */
+.preset-box { margin: 18px 22px 0; padding: 15px; border: 1px solid #e6eaf6; border-radius: 14px; background: linear-gradient(135deg, #f7f8ff, #fff); }
+.preset-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 11px; }
+.preset-heading b, .preset-heading small { display: block; }
+.preset-heading b { color: #344467; font-size: 11px; }
+.preset-heading small { margin-top: 3px; color: #9aa6b8; font-size: 9px; }
+.preset-heading > span { color: #7384d9; font-size: 9px; font-weight: 800; letter-spacing: .5px; }
+.preset-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+.preset-card { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 9px; border: 1px solid #e9edf5; border-radius: 10px; background: rgba(255,255,255,.78); color: #50617a; text-align: left; transition: .18s ease; }
+.preset-card:hover { border-color: #bbc8f8; background: #fff; transform: translateY(-1px); box-shadow: 0 7px 16px rgba(66, 88, 142, .08); }
+.preset-icon { display: grid; place-items: center; width: 24px; height: 24px; flex: 0 0 auto; border-radius: 7px; background: #eef1ff; color: #6175d8; font-size: 12px; }
+.preset-card > span:nth-child(2) { min-width: 0; }
+.preset-card b, .preset-card small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.preset-card b { color: #405171; font-size: 10px; }
+.preset-card small { margin-top: 3px; color: #a0abba; font-size: 8px; }
+.preset-card em { margin-left: auto; color: #6378d5; font-size: 9px; font-style: normal; font-weight: 800; }
+.publish-panel { margin-top: 23px; padding: 17px; border: 1px solid #e2e8f5; border-radius: 14px; background: linear-gradient(135deg, #fafbff, #fff); }
+.publish-heading { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.publish-heading h3 { margin: 0; color: #344565; font-size: 13px; }
+.publish-heading p { margin: 5px 0 0; color: #98a4b5; font-size: 9px; line-height: 1.6; }
+.publish-lock { padding: 5px 8px; border-radius: 99px; background: #eef1ff; color: #6376d2; font-size: 9px; font-weight: 700; white-space: nowrap; }
+.publish-controls { display: flex; align-items: center; gap: 8px; margin-top: 13px; }
+.publish-controls select { flex: 1; min-width: 0; height: 35px; border: 1px solid #dfe6f0; border-radius: 9px; padding: 0 10px; background: #fff; color: #5a6a83; font-size: 10px; }
+.adapted-result { margin-top: 13px; padding-top: 13px; border-top: 1px solid #edf1f6; }
+.adapted-actions { display: flex; gap: 7px; margin-bottom: 10px; }
+.adapted-actions button { border: 1px solid #dce4f1; border-radius: 8px; padding: 7px 10px; background: #fff; color: #526bca; font-size: 9px; font-weight: 700; }
+.adapted-actions button:hover { border-color: #b9c7f4; background: #f9faff; }
+.publish-warnings { display: grid; gap: 5px; margin-bottom: 9px; color: #ad7927; font-size: 9px; line-height: 1.5; }
+.publish-tags { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 9px; }
+.publish-tags span { color: #6177cd; font-size: 9px; }
+.adapted-result pre { max-height: 220px; overflow: auto; margin: 0; padding: 12px; border: 1px solid #edf1f6; border-radius: 9px; background: #f8faff; color: #5c6b80; font: 10px/1.8 "DM Sans", "Noto Sans SC", sans-serif; white-space: pre-wrap; }
+.media-hint { display: block; margin-top: 8px; color: #ad7927; font-size: 9px; }
+@media (max-width: 760px) {
+  .preset-list { grid-template-columns: 1fr; }
+  .publish-controls { align-items: stretch; flex-direction: column; }
+}
+.media-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; margin-top: 12px; }
+.media-strip img { width: 100%; height: 64px; object-fit: cover; border-radius: 8px; border: 1px solid #e3e9f3; background: #eef2f8; }
+@media (max-width: 760px) { .media-strip img { height: 56px; } }
