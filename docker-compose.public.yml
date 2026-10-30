@@ -1,0 +1,56 @@
+name: postmaker-public
+
+services:
+  dataradar:
+    build:
+      context: ./DataRadar
+      dockerfile: docker/Dockerfile.api
+    restart: unless-stopped
+    environment:
+      DATARADAR_AUTH_REQUIRED: "true"
+      DATARADAR_SQLITE_PATH: /data/dataradar.sqlite3
+      DATARADAR_WORKSPACES_DIR: /data/workspaces
+      WORKSPACE_AUTH_SECRET: ${WORKSPACE_AUTH_SECRET:?WORKSPACE_AUTH_SECRET must be set in .env}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:${POSTMAKER_PORT:-8787}}
+    volumes:
+      - public_data:/data
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  postmaker:
+    build:
+      context: ./PostMaker
+      dockerfile: docker/Dockerfile
+    restart: unless-stopped
+    environment:
+      POSTMAKER_AUTH_REQUIRED: "true"
+      POSTMAKER_AUTH_DB: /data/auth.sqlite3
+      POSTMAKER_WORKSPACES_DIR: /data/workspaces
+      POSTMAKER_COOKIE_SECURE: ${POSTMAKER_COOKIE_SECURE:-false}
+      DATARADAR_API_BASE: http://dataradar:8000
+      WORKSPACE_AUTH_SECRET: ${WORKSPACE_AUTH_SECRET:?WORKSPACE_AUTH_SECRET must be set in .env}
+      AI_API_KEY: ${AI_API_KEY:-}
+      AI_API_BASE: ${AI_API_BASE:-}
+      AI_MODEL: ${AI_MODEL:-}
+    volumes:
+      - public_data:/data
+    ports:
+      - "${POSTMAKER_PORT:-8787}:8787"
+    depends_on:
+      dataradar:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8787/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  public_data:
