@@ -132,25 +132,39 @@ docker compose up postgres redis rsshub -d
 
 | 变量 | 必填 | 默认值 | 说明 |
 |------|------|--------|------|
-| `AI_API_KEY` | 是 | — | LLM API 密钥（用于 AI 摘要） |
+| `AI_API_KEY` | 否 | — | LLM API 密钥（启用 AI 摘要时需要） |
 | `AI_MODEL` | 否 | config.yaml 中的值 | LLM 模型（LiteLLM 格式，如 `openai/gpt-4o`） |
 | `AI_API_BASE` | 否 | — | 自定义 API 端点 |
-| `POSTGRES_DSN` | 是 | — | PostgreSQL 连接串 |
+| `POSTGRES_DSN` | 否 | — | PostgreSQL 连接串；不设置时使用 SQLite |
 | `REDIS_URL` | 否 | — | Redis 连接串（无则跳过缓存） |
 | `EMBED_MODEL` | 否 | — | 嵌入模型（启用语义搜索） |
 | `EMBED_API_KEY` | 否 | `OPENAI_API_KEY` | 嵌入 API 密钥 |
 | `EMBED_API_BASE` | 否 | — | 嵌入 API 端点 |
 | `ALLOWED_ORIGINS` | 否 | `*` | CORS 允许来源（逗号分隔） |
 | `POSTGRES_PASSWORD` | 否 | `dataradar_secret` | Docker 中 PostgreSQL 密码 |
+| `DATARADAR_AUTH_REQUIRED` | 否 | `false` | 拒绝缺少有效 workspace 签名的 API 请求 |
+| `DATARADAR_WORKSPACES_DIR` | 否 | `output/workspaces` | SQLite 多用户数据根目录 |
+| `WORKSPACE_AUTH_SECRET` | 多用户时必填 | — | 与 PostMaker 共享的 HMAC 密钥 |
 
 ### PostMaker
 
 | 变量 | 必填 | 默认值 | 说明 |
 |------|------|--------|------|
-| `AI_API_KEY` | 是 | — | LLM API 密钥（用于内容生成） |
+| `AI_API_KEY` | 生成时需要 | — | LLM API 密钥（仅生成内容时需要） |
 | `AI_MODEL` | 否 | config.yaml 中的值 | LLM 模型 |
 | `AI_API_BASE` | 否 | — | 自定义 API 端点 |
 | `POSTGRES_DSN` | 否 | — | PostgreSQL 连接串（启用去重和历史） |
+| `POSTMAKER_AUTH_REQUIRED` | 否 | `false` | 强制登录才能访问工作台 API |
+| `POSTMAKER_AUTH_DB` | 否 | `PostMaker/output/auth.sqlite3` | 用户和 session 数据库 |
+| `POSTMAKER_WORKSPACES_DIR` | 否 | `output/workspaces` | 工作台草稿数据库根目录 |
+| `POSTMAKER_COOKIE_SECURE` | HTTPS 时必填 | `false` | 设置后浏览器仅通过 HTTPS 发送 session cookie |
+| `WORKSPACE_AUTH_SECRET` | 多用户时必填 | — | 与 DataRadar 使用相同的强随机密钥 |
+
+### 多用户 SQLite 部署
+
+PostMaker 和 DataRadar 必须共享同一 `WORKSPACE_AUTH_SECRET`，并同时启用 `POSTMAKER_AUTH_REQUIRED=true`、`DATARADAR_AUTH_REQUIRED=true`。工作台的 session cookie 使用 `HttpOnly`、`SameSite=Lax` 和 CSRF token；HTTPS 部署还必须设置 `POSTMAKER_COOKIE_SECURE=true`。将 `POSTMAKER_AUTH_DB`、`POSTMAKER_WORKSPACES_DIR` 和 `DATARADAR_WORKSPACES_DIR` 指向持久化磁盘，并限制 DataRadar API 只允许 PostMaker 服务访问。
+
+该隔离实现以 SQLite 独立文件为边界。PostgreSQL repositories 仍是单库模式，DataRadar 多 worker 的采集状态也仍在进程内，因此这些模式尚不能作为多租户生产后端。
 
 ---
 

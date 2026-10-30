@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import os
 import re
+import hashlib
+import hmac
 from contextvars import ContextVar
 from pathlib import Path
 
@@ -39,3 +41,8 @@ def workspace_config_path() -> Path:
 
 def workspace_sqlite_path() -> Path:
     return workspace_root() / "dataradar.sqlite3"
+
+
+def workspace_signature(value: str) -> str:
+    secret = os.getenv("WORKSPACE_AUTH_SECRET", "development-only-change-me").encode()
+    return hmac.new(secret, value.encode(), hashlib.sha256).hexdigest()

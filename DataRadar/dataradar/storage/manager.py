@@ -12,9 +12,10 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from dataradar.storage.base import RSSData, RSSItem
+from dataradar.workspace import workspace_id, workspace_sqlite_path
 
 logger = logging.getLogger(__name__)
-_storage_manager: Optional["StorageManager"] = None
+_storage_managers: Dict[tuple[str, str], "StorageManager"] = {}
 
 
 class StorageManager:
@@ -22,9 +23,11 @@ class StorageManager:
 
     def __init__(self, dsn: str = "", db_path: str | None = None):
         self.dsn = (dsn or "").strip()
-        self.db_path = db_path or os.getenv(
-            "DATARADAR_SQLITE_PATH",
-            str(Path(__file__).resolve().parents[2] / "output" / "dataradar.sqlite3"),
+        self.db_path = db_path or (
+            str(workspace_sqlite_path()) if workspace_id() != "default" else os.getenv(
+                "DATARADAR_SQLITE_PATH",
+                str(Path(__file__).resolve().parents[2] / "output" / "dataradar.sqlite3"),
+            )
         )
         self._pool = None
         self._conn: sqlite3.Connection | None = None
@@ -241,7 +244,9 @@ class StorageManager:
 
 
 def get_storage_manager(dsn: str = "", force_new: bool = False) -> StorageManager:
-    global _storage_manager
-    if _storage_manager is None or force_new or (_storage_manager.dsn != (dsn or "")):
-        _storage_manager = StorageManager(dsn=dsn)
-    return _storage_manager
+    key = (workspace_id(), dsn or "")
+    if force_new or key not in _storage_managers:
+        manager = StorageManager(dsn=dsn)
+        _storage_managers[key] = manager
+    manager = _storage_managers[key]
+    return manager

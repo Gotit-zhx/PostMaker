@@ -9,6 +9,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from postmaker.workbench.workspace import workspace_db_path, workspace_id
+
 PENDING_REVIEW = "pending_review"
 
 
@@ -19,7 +21,13 @@ def _now() -> str:
 class WorkbenchStore:
     def __init__(self, path: str | None = None):
         default_path = Path(__file__).resolve().parents[2] / "output" / "workbench.sqlite3"
-        self.path = Path(path or os.getenv("POSTMAKER_WORKBENCH_DB", default_path))
+        if path:
+            selected_path = path
+        elif workspace_id() != "default":
+            selected_path = workspace_db_path()
+        else:
+            selected_path = os.getenv("POSTMAKER_WORKBENCH_DB", default_path)
+        self.path = Path(selected_path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._initialize()
 

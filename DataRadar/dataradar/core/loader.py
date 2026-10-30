@@ -13,6 +13,7 @@ from typing import Dict, Any, Optional
 import yaml
 
 from dataradar.utils.time import DEFAULT_TIMEZONE
+from dataradar.workspace import workspace_config_path, workspace_id
 
 logger = logging.getLogger(__name__)
 
@@ -277,7 +278,13 @@ def load_config(config_path: Optional[str] = None) -> Dict[str, Any]:
         FileNotFoundError: 配置文件不存在
     """
     if config_path is None:
-        config_path = os.environ.get("CONFIG_PATH", "config/config.yaml")
+        configured = os.environ.get("CONFIG_PATH")
+        if configured:
+            config_path = configured
+        elif workspace_id() != "default":
+            config_path = str(workspace_config_path())
+        else:
+            config_path = "config/config.yaml"
 
     path = Path(config_path)
     if not path.exists():

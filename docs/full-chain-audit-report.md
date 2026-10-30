@@ -4,7 +4,7 @@
 
 ## 结论
 
-单用户本地 SQLite MVP 已具备从可视化 RSS 配置到内容审核导出的功能闭环：网页可以添加、测试、启停和删除 RSS 源，启动采集并查看状态；素材可由工作台读取，生成草稿后可编辑、修订、批准并导出 Markdown。采集链路使用本机临时 RSS HTTP 服务做过真实 HTTP smoke test；草稿生成使用 mock 验证，没有调用真实 AI API，也没有读取或保存用户提供的 API key。
+本地 SQLite MVP 已具备从可视化 RSS 配置到内容审核导出的功能闭环：网页可以添加、测试、启停和删除 RSS 源，启动采集并查看状态；素材可由工作台读取，生成草稿后可编辑、修订、批准并导出 Markdown。工作台默认支持匿名开发模式，也可以启用账号、CSRF 和按用户隔离的 SQLite workspace。采集链路使用本机临时 RSS HTTP 服务做过真实 HTTP smoke test；草稿生成使用 mock 验证，没有调用真实 AI API，也没有读取或保存用户提供的 API key。
 
 生产级 PostgreSQL、Redis、pgvector、Playwright 和真实模型调用没有在本次环境启动验证，部署前仍需单独验收。
 
@@ -64,8 +64,8 @@ DATARADAR_API_BASE=http://127.0.0.1:18000 \
 ## 测试结果
 
 ```text
-DataRadar: 61 passed
-PostMaker: 54 passed, 2 deselected (e2e)
+DataRadar: 75 passed
+PostMaker: 55 passed, 2 deselected (e2e)
 compileall: passed
 git diff --check: passed
 ```
@@ -77,16 +77,16 @@ git diff --check: passed
 - PostgreSQL 路径只完成静态检查和单元测试，没有在本机启动真实 PostgreSQL/pgvector。
 - Redis 未配置时健康检查会显示 `redis: unavailable`，但本地 API 仍可工作；生产部署需要 Redis 或调整健康探针策略。
 - 语义搜索需要配置 embedding 模型和 API key，本次没有调用模型。
-- 工作台目前是单用户本地审核工具，没有注册登录、租户隔离、团队权限、并发编辑冲突处理和发布平台适配；当前版本不能直接作为面向公众的托管 SaaS 开放使用。
-- 数据源配置当前写入服务端 YAML，采集状态保存在 DataRadar 单进程内存。要支持多个用户独立配置与并发使用，需要迁移至按用户隔离的持久化存储和共享任务队列。
-- SQLite 适合单机开发和小规模部署；多进程高并发采集应切换 PostgreSQL。
+- 工作台支持注册登录、CSRF 和 SQLite workspace 隔离，但团队权限、并发编辑冲突处理和发布平台适配尚未实现；当前版本仍不适合作为面向公众的托管 SaaS 直接开放。
+- 认证模式下，数据源配置和素材数据库按 workspace 持久化，采集状态仍保存在 DataRadar 单进程内存，多 worker 部署需要共享任务队列。
+- SQLite 适合单机开发和小规模部署；PostgreSQL 当前仍是单库模型，正式多租户部署前需要加入 workspace 字段或独立 schema。
 - `mark_used` 当前只记录素材与 persona 的关系，尚未在列表响应中展示“已使用”状态。
 
 ## 后续改造优先级
 
 ### P0：先保证可运营
 
-1. 增加 DataRadar 与 PostMaker 的鉴权、请求限流和敏感配置检查，禁止 API key 出现在日志和导出文件中。
+1. 增加 DataRadar 与 PostMaker 的请求限流、敏感配置检查和审计日志，禁止 API key 出现在日志和导出文件中。
 2. 为 PostgreSQL、Redis 和 pgvector 增加 Docker smoke test，并把健康检查纳入部署流水线。
 3. 为采集任务增加失败重试、单源超时、失败源统计和告警。
 4. 给 `mark_used` 增加查询接口或返回字段，避免重复生产相同素材/persona 草稿。

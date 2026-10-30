@@ -46,7 +46,7 @@
 4. [配置 PostMaker](#5-配置-postmaker)
 5. [使用审核工作台完成闭环](#7-使用审核工作台完成闭环)
 
-如果你已经能看到素材，可以直接从 [用 CLI 生成内容](#6-用-cli-生成内容) 开始。当前工作台是单用户本地工具；RSS 源可以在“数据源”页面配置，也可以继续使用 CLI 或 YAML。
+如果你已经能看到素材，可以直接从 [用 CLI 生成内容](#6-用-cli-生成内容) 开始。工作台默认匿名运行；部署时可以启用账号登录和 SQLite 工作区隔离。RSS 源可以在“数据源”页面配置，也可以继续使用 CLI 或 YAML。
 
 ## 0. 先理解一次完整操作
 
@@ -113,6 +113,7 @@ uv run playwright install chromium
 - DataRadar 本地数据库由 `DATARADAR_SQLITE_PATH` 指定；未指定时使用项目默认的 SQLite 路径。
 - PostMaker CLI 输出到 `PostMaker/output/`。
 - PostMaker 工作台草稿数据库默认是 `PostMaker/output/workbench.sqlite3`。
+- 启用登录后，账号/session 存于 `POSTMAKER_AUTH_DB`，每个用户的草稿和 DataRadar 数据分别写入两个工作区根目录下的独立 SQLite 文件。
 
 建议开发时显式指定路径，便于备份和清理：
 
@@ -218,6 +219,29 @@ advanced:
 
 先用 `source test` 验证单个源，再执行完整采集，避免一个失效源拖慢排查。
 
+### 2.6 启用登录和独立工作区（可选）
+
+默认开发模式不要求登录。需要让多个用户在同一台机器上使用时，在启动两个服务前设置相同的签名密钥，并同时打开认证：
+
+```bash
+export WORKSPACE_AUTH_SECRET="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+export POSTMAKER_AUTH_REQUIRED=true
+export DATARADAR_AUTH_REQUIRED=true
+export POSTMAKER_AUTH_DB="$PWD/PostMaker/output/auth.sqlite3"
+export POSTMAKER_WORKSPACES_DIR="$PWD/PostMaker/output/workspaces"
+export DATARADAR_WORKSPACES_DIR="$PWD/DataRadar/output/workspaces"
+```
+
+如果通过 HTTPS 反向代理访问工作台，再设置：
+
+```bash
+export POSTMAKER_COOKIE_SECURE=true
+```
+
+先启动 DataRadar，再启动 PostMaker。第一次打开工作台时选择“注册”，之后使用邮箱和密码登录。每个账号会自动获得一个 workspace；RSS 配置、采集素材、草稿和修订分别存放在该 workspace 的 SQLite 文件中。浏览器不能自行指定 workspace，PostMaker 会把服务端 session 对应的 workspace 以签名 header 传给 DataRadar。
+
+这种模式适合小规模单机部署。PostgreSQL 当前仍是单库模型，采集状态仍在 DataRadar 进程内，多 worker 或正式多租户部署前需要共享任务队列和 workspace 级数据库设计。
+
 ## 3. 运行 DataRadar
 
 ### 3.1 启动 API（SQLite 模式）
@@ -267,7 +291,7 @@ uv run dataradar kb stats
 3. 点击“保存数据源”，源会写入 DataRadar 配置并默认启用。
 4. 点击“立即采集”，页面会显示运行中、完成或失败状态；采集完成后回到“素材发现”刷新列表。
 
-已保存的源支持再次测试、启用、停用和删除。工作台通过 PostMaker 代理访问 DataRadar，因此浏览器只需要访问 `8787` 端口。采集状态保存在当前 DataRadar 进程内，适合单实例本地运行；多 worker 部署前应先增加共享任务队列和权限隔离。
+已保存的源支持再次测试、启用、停用和删除。工作台通过 PostMaker 代理访问 DataRadar，因此浏览器只需要访问 `8787` 端口。每个 workspace 有自己的 RSS 配置、素材库和采集状态；采集状态保存在当前 DataRadar 进程内，多 worker 部署需要外部共享任务队列。
 
 ### 3.4 查询和搜索素材
 
@@ -328,7 +352,7 @@ curl http://127.0.0.1:8000/api/v1/content/42
 
 内容列表使用游标分页：读取响应中的 `meta.next_cursor`，再把它作为下一次请求的 `cursor`。
 
-完整字段、错误码和语义搜索请求体见 [API 参考](api-reference.md)。当前 API 默认没有认证，生产环境应放在带认证和限流的网关后面。
+完整字段、错误码和语义搜索请求体见 [API 参考](api-reference.md)。工作台登录通过 `POSTMAKER_AUTH_REQUIRED=true` 启用；DataRadar 服务间访问校验 workspace 签名。生产部署仍应启用 HTTPS、限流并限制管理端口的公网访问。
 
 调用数据源管理接口时，RSS 地址必须先通过公开 URL 校验；校验失败通常返回 HTTP 422。采集接口是单实例后台任务，同一进程同时只能运行一个采集任务。
 
@@ -346,7 +370,7 @@ export AI_API_KEY="your-api-key"
 export AI_MODEL="deepseek/deepseek-chat"
 ```
 
-环境变量会覆盖配置文件中的对应值。工作台和 CLI 使用同一套配置。
+环境变量会覆盖配置文件中的对应值。工作台和 CLI 使用同一套配置。多用户模式需要在 PostMaker 与 DataRadar 同时设置 `WORKSPACE_AUTH_SECRET`，并启用 `POSTMAKER_AUTH_REQUIRED=true` 和 `DATARADAR_AUTH_REQUIRED=true`。HTTPS 反向代理下设置 `POSTMAKER_COOKIE_SECURE=true`。当前用户隔离基于 SQLite 独立数据库；PostgreSQL 仓储尚未加入 workspace 维度，不应用于多租户生产部署。
 
 ### 5.2 查看 persona
 
@@ -462,6 +486,8 @@ uv run postmaker workbench --host 127.0.0.1 --port 9000
 ```bash
 curl http://127.0.0.1:8787/api/health
 ```
+
+如果启用了认证，页面会先显示登录表单。新用户点击“还没有账号？注册”，填写邮箱和至少 8 位密码后进入自己的工作区；已有用户直接登录。右上角会显示当前邮箱，点击“退出”会销毁 session。所有修改请求都会自动携带 CSRF token，浏览器端不需要手动设置。
 
 ### 7.2 页面操作流程
 

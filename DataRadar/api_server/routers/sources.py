@@ -22,19 +22,26 @@ from dataradar.collector import DataCollector
 from dataradar.core.loader import load_config
 from dataradar.source_manager import SourceManager
 from dataradar.utils.url_safety import UnsafeURL, validate_public_url
+from dataradar.workspace import workspace_id
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["sources"])
 
 _SOURCE_LOCK = threading.RLock()
-_collection_task: Optional[asyncio.Task] = None
-_collection_state: dict[str, Any] = {
-    "job_id": None,
-    "status": "idle",
-    "started_at": None,
-    "finished_at": None,
-    "error": None,
-}
+_collection_tasks: dict[str, asyncio.Task] = {}
+_collection_states: dict[str, dict[str, Any]] = {}
+
+
+def _workspace_key() -> str:
+    return workspace_id()
+
+
+def _state(key: str | None = None) -> dict[str, Any]:
+    key = key or _workspace_key()
+    return _collection_states.setdefault(key, {
+        "job_id": None, "status": "idle", "started_at": None,
+        "finished_at": None, "error": None,
+    })
 
 
 class RSSSourceCreate(BaseModel):
@@ -194,12 +201,12 @@ async def delete_source(source_id: str):
 
 
 async def _run_collection(job_id: str) -> None:
-    global _collection_state
+    key = _workspace_key()
     try:
         config = load_config()
         await DataCollector(config).run()
-        _collection_state = {
-            **_collection_state,
+        _collection_states[key] = {
+            **_state(key),
             "job_id": job_id,
             "status": "completed",
             "finished_at": _now(),
@@ -207,8 +214,8 @@ async def _run_collection(job_id: str) -> None:
         }
     except Exception as exc:  # pragma: no cover - exercised by integration tests
         logger.exception("后台采集任务失败 job_id=%s", job_id)
-        _collection_state = {
-            **_collection_state,
+        _collection_states[key] = {
+            **_state(key),
             "job_id": job_id,
             "status": "failed",
             "finished_at": _now(),
@@ -218,22 +225,23 @@ async def _run_collection(job_id: str) -> None:
 
 @router.post("/collect", status_code=status.HTTP_202_ACCEPTED)
 async def trigger_collection():
-    global _collection_task, _collection_state
-    if _collection_task and not _collection_task.done():
+    key = _workspace_key()
+    task = _collection_tasks.get(key)
+    if task and not task.done():
         raise HTTPException(status_code=409, detail="已有采集任务正在运行")
 
     job_id = uuid.uuid4().hex
-    _collection_state = {
+    _collection_states[key] = {
         "job_id": job_id,
         "status": "running",
         "started_at": _now(),
         "finished_at": None,
         "error": None,
     }
-    _collection_task = asyncio.create_task(_run_collection(job_id))
-    return {**_collection_state}
+    _collection_tasks[key] = asyncio.create_task(_run_collection(job_id))
+    return {**_collection_states[key]}
 
 
 @router.get("/collect/status")
 async def collection_status():
-    return {**_collection_state}
+    return {**_state()}
