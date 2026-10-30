@@ -1,3 +1,12 @@
+FROM node:22-alpine AS frontend-build
+
+WORKDIR /src
+COPY frontend/package.json frontend/package-lock.json ./frontend/
+RUN npm ci --prefix frontend
+COPY frontend/ ./frontend/
+COPY PostMaker/postmaker/workbench/static/ ./PostMaker/postmaker/workbench/static/
+RUN npm run build --prefix frontend
+
 FROM python:3.12-slim
 
 WORKDIR /app
@@ -7,11 +16,12 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
 
-COPY pyproject.toml ./
-COPY postmaker/ ./postmaker/
-COPY config/ ./config/
-COPY templates/ ./templates/
-COPY prompts/ ./prompts/
+COPY PostMaker/pyproject.toml ./
+COPY PostMaker/postmaker/ ./postmaker/
+COPY PostMaker/config/ ./config/
+COPY PostMaker/templates/ ./templates/
+COPY PostMaker/prompts/ ./prompts/
+COPY --from=frontend-build /src/PostMaker/postmaker/workbench/static/ ./postmaker/workbench/static/
 
 RUN pip install --no-cache-dir .
 
