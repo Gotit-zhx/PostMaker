@@ -175,4 +175,4 @@ uv run pytest tests/ -v -m "not e2e"
 AI_API_KEY=... AI_MODEL=... uv run pytest tests/ -v
 ```
 
-当前测试覆盖：52 个通过、2 个跳过（单元 + 集成），详见 [docs/testing.md](../docs/testing.md)
+当前测试覆盖：57 个通过、2 个 E2E 测试按标记排除，详见 [docs/testing.md](../docs/testing.md)

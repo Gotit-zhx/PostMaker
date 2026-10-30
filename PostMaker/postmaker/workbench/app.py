@@ -46,6 +46,29 @@ def _cookie_secure() -> bool:
     return os.getenv("POSTMAKER_COOKIE_SECURE", "0").lower() in {"1", "true", "yes"}
 
 
+def _client_key(request: Request) -> str:
+    return request.client.host if request.client and request.client.host else "unknown"
+
+
+def _auth_rate_limit(request: Request, action: str) -> JSONResponse | None:
+    """Limit public auth endpoints before password work or account creation."""
+    defaults = {"register": (5, 600), "login": (15, 300)}
+    limit, window = defaults[action]
+    try:
+        limit = int(os.getenv(f"POSTMAKER_{action.upper()}_RATE_LIMIT", str(limit)))
+        window = int(os.getenv("POSTMAKER_AUTH_RATE_WINDOW", str(window)))
+    except ValueError:
+        pass
+    allowed, retry_after = auth_store.check_rate_limit(f"{action}:{_client_key(request)}", limit, window)
+    if allowed:
+        return None
+    return JSONResponse(
+        {"detail": "请求过于频繁，请稍后重试"},
+        status_code=429,
+        headers={"Retry-After": str(retry_after)},
+    )
+
+
 @app.middleware("http")
 async def request_context(request: Request, call_next):
     token = None
@@ -110,9 +133,12 @@ class AuthRequest(BaseModel):
 
 
 @app.post("/api/auth/register", status_code=201)
-async def auth_register(request: AuthRequest):
+async def auth_register(payload: AuthRequest, request: Request):
+    limited = _auth_rate_limit(request, "register")
+    if limited:
+        return limited
     try:
-        user = auth_store.create_user(request.email, request.password)
+        user = auth_store.create_user(payload.email, payload.password)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     raw, csrf = auth_store.create_session(user["id"])
@@ -123,8 +149,19 @@ async def auth_register(request: AuthRequest):
 
 
 @app.post("/api/auth/login")
-async def auth_login(request: AuthRequest):
-    user = auth_store.authenticate(request.email, request.password)
+async def auth_login(payload: AuthRequest, request: Request):
+    limited = _auth_rate_limit(request, "login")
+    if limited:
+        return limited
+    client_key = _client_key(request)
+    locked = auth_store.login_lockout_remaining(payload.email, client_key)
+    if locked:
+        return JSONResponse(
+            {"detail": "登录失败次数过多，请稍后重试"},
+            status_code=429,
+            headers={"Retry-After": str(locked)},
+        )
+    user = auth_store.authenticate(payload.email, payload.password, client_key=client_key)
     if not user:
         raise HTTPException(status_code=401, detail="邮箱或密码错误")
     raw, csrf = auth_store.create_session(user["id"])

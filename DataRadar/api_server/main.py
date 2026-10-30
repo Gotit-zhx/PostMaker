@@ -10,7 +10,7 @@ DataRadar 知识库 API 的 FastAPI 应用入口。
 
 运行方式::
 
-    uvicorn api_server.main:app --host 0.0.0.0 --port 8000 --workers 4
+    uvicorn api_server.main:app --host 0.0.0.0 --port 8000 --workers 1
 """
 
 from __future__ import annotations
