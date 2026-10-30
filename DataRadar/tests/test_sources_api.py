@@ -30,6 +30,13 @@ class FakeManager:
     def test_feed(self, value):
         return {"success": True, "feed_name": "Demo", "url": "https://example.com/feed.xml", "item_count": 1, "items": [{"title": "Item", "url": "https://example.com/item"}]}
 
+    def update_feed(self, source_id, url, name="", max_age_days=3, enabled=True):
+        for item in self.feeds:
+            if item["id"] == source_id:
+                item.update({"url": url, "name": name or item["name"], "max_age_days": max_age_days, "enabled": enabled})
+                return {"id": source_id, "name": item["name"], "url": url, "status": "updated"}
+        raise KeyError(source_id)
+
     def test_target(self, value):
         return {"success": True, "item_count": 0, "items": []}
 
@@ -78,6 +85,13 @@ async def test_source_lifecycle_and_validation(client):
         added = await http.post("/api/v1/sources/rss", json={"id": "new", "url": "https://example.com/new.xml"})
         assert added.status_code == 201
         assert added.json()["id"] == "new"
+
+        updated = await http.put(
+            "/api/v1/sources/rss/new",
+            json={"name": "Updated", "url": "https://example.com/updated.xml", "max_age_days": 10},
+        )
+        assert updated.status_code == 200
+        assert updated.json()["url"] == "https://example.com/updated.xml"
 
         tested = await http.post("/api/v1/sources/rss/test", json={"url": "https://example.com/new.xml"})
         assert tested.status_code == 200

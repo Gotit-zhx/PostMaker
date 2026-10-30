@@ -212,6 +212,11 @@ async def add_rss_source(payload: dict):
     return await _dataradar_request("POST", "/api/v1/sources/rss", json=payload)
 
 
+@app.put("/api/sources/rss/{source_id}")
+async def update_rss_source(source_id: str, payload: dict):
+    return await _dataradar_request("PUT", f"/api/v1/sources/rss/{source_id}", json=payload)
+
+
 @app.post("/api/sources/rss/test")
 async def test_rss_source(payload: dict):
     return await _dataradar_request("POST", "/api/v1/sources/rss/test", json=payload)
