@@ -2,9 +2,9 @@
 
 ## 项目概述
 
-DataRadar 是**数据采集 + 知识库系统**，从 RSS 源和可选的 Playwright 网页采集内容，经三引擎全文提取和 AI 结构化摘要后**直写 PostgreSQL**，通过可选的后处理管道生成 embedding 和知识聚合，提供 REST API 和语义搜索。
+DataRadar 是**数据采集 + 知识库系统**，从 RSS 源和可选的 Playwright 网页采集内容，经三引擎全文提取和可选的 AI 结构化摘要后写入 PostgreSQL 或本地 SQLite，通过可选的后处理管道生成 embedding 和知识聚合，提供 REST API 和语义搜索。
 
-**核心流程**：RSS 采集 → 全文提取（Trafilatura → Playwright → Jina） → AI 结构化摘要 → PostgreSQL 直写 → 后处理（embedding + 聚合）→ REST API
+**核心流程**：RSS 采集 → 全文提取（Trafilatura → Playwright → Jina） → AI 结构化摘要（可选） → PostgreSQL / SQLite → 后处理（embedding + 聚合）→ REST API
 
 **设计原则**：采集阶段全量入库不过滤，过滤功能下沉到检索/查询时。
 

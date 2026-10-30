@@ -24,10 +24,12 @@ from api_server.schemas import (
     TrendingTopicsResponse,
 )
 from knowledge_base.repository import ContentRepository
+from knowledge_base.local_repository import LocalContentRepository
+import os
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/content", tags=["content"])
-_repo = ContentRepository()
+_repo = ContentRepository() if os.getenv("POSTGRES_DSN") else LocalContentRepository()
 
 
 # ── 辅助函数 ──────────────────────────────────────────────────────
@@ -67,7 +69,10 @@ async def list_content(
     使用游标分页以提升性能。
     """
     from datetime import date as date_cls
-    date_str = date or date_cls.today().isoformat()
+    date_str = date
+    if date_str is None and isinstance(_repo, LocalContentRepository):
+        date_str = await _repo.get_latest_date()
+    date_str = date_str or date_cls.today().isoformat()
 
     rows = await _repo.list_by_date(
         date_str,
@@ -141,7 +146,10 @@ async def get_trending(
 ):
     """获取指定日期的热门内容，按重要性分数排序。"""
     from datetime import date as date_cls
-    date_str = date or date_cls.today().isoformat()
+    date_str = date
+    if date_str is None and isinstance(_repo, LocalContentRepository):
+        date_str = await _repo.get_latest_date()
+    date_str = date_str or date_cls.today().isoformat()
     rows = await _repo.get_trending(date_str, content_type=content_type, limit=limit)
     return ContentListResponse(
         items=[_to_summary(r) for r in rows],
@@ -158,7 +166,10 @@ async def get_trending_topics(
 ):
     """按分类聚合的热门主题，含数量、来源数、平均重要性。"""
     from datetime import date as date_cls
-    date_str = date or date_cls.today().isoformat()
+    date_str = date
+    if date_str is None and isinstance(_repo, LocalContentRepository):
+        date_str = await _repo.get_latest_date()
+    date_str = date_str or date_cls.today().isoformat()
     rows = await _repo.get_trending_topics(date_str, days=days, limit=limit)
     topics = []
     for r in rows:
@@ -184,7 +195,10 @@ async def get_content_bundle(
 ):
     """获取某主题分类下的素材包。"""
     from datetime import date as date_cls
-    date_str = date or date_cls.today().isoformat()
+    date_str = date
+    if date_str is None and isinstance(_repo, LocalContentRepository):
+        date_str = await _repo.get_latest_date()
+    date_str = date_str or date_cls.today().isoformat()
     rows = await _repo.list_by_category(date_str, category=category, limit=limit)
     return ContentBundleResponse(
         category=category,

@@ -313,13 +313,13 @@ web_scraper:
 # 需要运行 PostgreSQL（含 pgvector 扩展）和 Redis
 # ===============================================================
 knowledge_base:
-  enabled: true                         # 总开关（需先部署 PostgreSQL + Redis）
+  enabled: false                         # 总开关（需先部署 PostgreSQL + Redis）
 
   # PostgreSQL 连接（支持环境变量）
-  postgres_dsn: "postgresql://dataradar:dataradar_secret@localhost:5432/knowledge_base"
+  postgres_dsn: ""
 
   # Redis 连接（留空则禁用缓存）
-  redis_url: "redis://localhost:6379/0"
+  redis_url: ""
 
   # Embedding 配置（用于语义搜索）
   embedding:
@@ -344,14 +344,14 @@ knowledge_base:
 
   # 全文提取（三引擎：Trafilatura → Playwright → Jina）
   enricher:
-    enabled: true
-    use_playwright: true                # 是否启用 Playwright 渲染回退
+    enabled: false
+    use_playwright: false                # 是否启用 Playwright 渲染回退
     jina_api_key: ""                    # 可选，空则用免费额度（20 req/min）
     rate_limit_per_min: 10              # Jina Reader 请求速率
 
   # AI 摘要生成（~200 token RAG 检索摘要）
   summarizer:
-    enabled: true                       # 需要 AI API Key
+    enabled: false                       # 需要 AI API Key
     max_tokens: 250                     # 摘要最大 token 数
     batch_size: 20                      # 每批处理数量
     skip_if_exists: true                # 已有摘要的条目跳过

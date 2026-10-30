@@ -48,10 +48,10 @@ async def lifespan(app: FastAPI):
         await init_pool(postgres_dsn)
         logger.info("PostgreSQL pool initialised.")
     else:
-        logger.warning(
-            "POSTGRES_DSN not set — database operations will fail. "
-            "Set POSTGRES_DSN=postgresql://user:pass@host:5432/dbname"
-        )
+        # Local SQLite is the default development/runtime backend.
+        from knowledge_base.local_repository import LocalContentRepository
+        LocalContentRepository()._connect().close()
+        logger.info("POSTGRES_DSN not set — using local SQLite content store.")
 
     # ── Redis ──────────────────────────────────────────────────────
     redis_url = os.getenv("REDIS_URL")
@@ -133,16 +133,25 @@ app.include_router(stats.router)
 async def health():
     """就绪探针：检查 PostgreSQL 和 Redis 连接状态。"""
     from fastapi.responses import JSONResponse
-    checks = {"status": "ok", "postgres": "ok", "redis": "ok"}
+    checks = {"status": "ok", "postgres": "not_configured", "sqlite": "ok", "redis": "ok"}
 
-    try:
-        from knowledge_base.db import get_pool
-        pool = get_pool()
-        async with pool.acquire() as conn:
-            await conn.fetchval("SELECT 1")
-    except Exception:
-        checks["postgres"] = "unavailable"
-        checks["status"] = "degraded"
+    if os.getenv("POSTGRES_DSN"):
+        try:
+            from knowledge_base.db import get_pool
+            pool = get_pool()
+            async with pool.acquire() as conn:
+                await conn.fetchval("SELECT 1")
+            checks["postgres"] = "ok"
+        except Exception:
+            checks["postgres"] = "unavailable"
+            checks["status"] = "degraded"
+    else:
+        try:
+            from knowledge_base.local_repository import LocalContentRepository
+            conn = LocalContentRepository()._connect(); conn.execute("SELECT 1"); conn.close()
+        except Exception:
+            checks["sqlite"] = "unavailable"
+            checks["status"] = "degraded"
 
     try:
         from knowledge_base.cache import get_cache
