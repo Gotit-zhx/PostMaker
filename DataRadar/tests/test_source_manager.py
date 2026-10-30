@@ -28,9 +28,19 @@ def test_source_manager_uses_config_path_environment(tmp_path, monkeypatch):
     assert data["rss"]["feeds"][0]["url"] == "https://example.com/feed.xml"
 
 
-def test_source_manager_reports_missing_config(tmp_path):
-    with pytest.raises(FileNotFoundError, match="config.example.yaml"):
-        SourceManager(str(tmp_path / "missing.yaml")).list_feeds()
+def test_source_manager_initializes_missing_config_from_example(tmp_path):
+    config_path = tmp_path / "nested" / "config.yaml"
+    example_path = Path(__file__).parents[1] / "config" / "config.example.yaml"
+    example_before = example_path.read_bytes()
+
+    manager = SourceManager(str(config_path))
+    feeds = manager.list_feeds()
+    assert feeds
+    assert config_path.exists()
+
+    manager.add_feed("https://example.com/new.xml", id="new", name="New")
+    assert b"https://example.com/new.xml" in config_path.read_bytes()
+    assert example_path.read_bytes() == example_before
 
 
 def test_source_manager_source_lifecycle(tmp_path):
