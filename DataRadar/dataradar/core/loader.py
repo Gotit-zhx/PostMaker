@@ -13,6 +13,7 @@ from typing import Dict, Any, Optional
 import yaml
 
 from dataradar.utils.time import DEFAULT_TIMEZONE
+from dataradar.workspace import ensure_workspace_config, workspace_config_path, workspace_id
 
 logger = logging.getLogger(__name__)
 
@@ -277,13 +278,27 @@ def load_config(config_path: Optional[str] = None) -> Dict[str, Any]:
         FileNotFoundError: 配置文件不存在
     """
     if config_path is None:
-        config_path = os.environ.get("CONFIG_PATH", "config/config.yaml")
+        if workspace_id() != "default":
+            config_path = str(ensure_workspace_config())
+        else:
+            config_path = os.environ.get("CONFIG_PATH") or "config/config.yaml"
 
-    if not Path(config_path).exists():
-        raise FileNotFoundError(f"配置文件 {config_path} 不存在")
+    path = Path(config_path)
+    if not path.exists():
+        # Support running from the repository root and fresh checkouts where
+        # only the example configuration exists.
+        module_root = Path(__file__).resolve().parents[2]
+        candidates = [
+            module_root / config_path,
+            module_root / "config" / "config.yaml",
+            module_root / "config" / "config.example.yaml",
+        ]
+        path = next((candidate for candidate in candidates if candidate.exists()), path)
+    if not path.exists():
+        raise FileNotFoundError(f"配置文件 {config_path} 不存在，且未找到 config.example.yaml")
 
-    with open(config_path, "r", encoding="utf-8") as f:
-        config_data = yaml.safe_load(f)
+    with open(path, "r", encoding="utf-8") as f:
+        config_data = yaml.safe_load(f) or {}
 
     logger.debug("配置文件加载成功: %s", config_path)
 

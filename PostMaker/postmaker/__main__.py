@@ -39,11 +39,21 @@ def main():
     cfg = sub.add_parser("config", help="查看配置")
     cfg.add_argument("section", nargs="?", help="配置段名")
 
+    # workbench
+    wb = sub.add_parser("workbench", help="启动本地内容审核工作台")
+    wb.add_argument("--host", default="127.0.0.1", help="监听地址")
+    wb.add_argument("--port", type=int, default=8787, help="监听端口")
+
     args = parser.parse_args()
 
     if not args.command:
         parser.print_help()
         sys.exit(0)
+
+    if args.command == "workbench":
+        import uvicorn
+        uvicorn.run("postmaker.workbench.app:app", host=args.host, port=args.port, reload=False)
+        return
 
     asyncio.run(_dispatch(args))
 

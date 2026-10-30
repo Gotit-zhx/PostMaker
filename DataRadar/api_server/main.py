@@ -10,20 +10,24 @@ DataRadar 知识库 API 的 FastAPI 应用入口。
 
 运行方式::
 
-    uvicorn api_server.main:app --host 0.0.0.0 --port 8000 --workers 4
+    uvicorn api_server.main:app --host 0.0.0.0 --port 8000 --workers 1
 """
 
 from __future__ import annotations
 
 import logging
 import os
+import hmac
 from contextlib import asynccontextmanager
 from typing import Optional
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from api_server.routers import content, knowledge, stats
+from api_server.routers import sources
+from dataradar.workspace import reset_workspace, set_workspace_id, workspace_signature
 
 logger = logging.getLogger(__name__)
 
@@ -48,10 +52,10 @@ async def lifespan(app: FastAPI):
         await init_pool(postgres_dsn)
         logger.info("PostgreSQL pool initialised.")
     else:
-        logger.warning(
-            "POSTGRES_DSN not set — database operations will fail. "
-            "Set POSTGRES_DSN=postgresql://user:pass@host:5432/dbname"
-        )
+        # Local SQLite is the default development/runtime backend.
+        from knowledge_base.local_repository import LocalContentRepository
+        LocalContentRepository()._connect().close()
+        logger.info("POSTGRES_DSN not set — using local SQLite content store.")
 
     # ── Redis ──────────────────────────────────────────────────────
     redis_url = os.getenv("REDIS_URL")
@@ -113,6 +117,35 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+
+def _auth_required() -> bool:
+    return os.getenv("DATARADAR_AUTH_REQUIRED", "0").lower() in {"1", "true", "yes"}
+
+
+@app.middleware("http")
+async def workspace_auth(request: Request, call_next):
+    if not _auth_required() or request.url.path in {"/health", "/docs", "/openapi.json", "/redoc"}:
+        return await call_next(request)
+    if not request.url.path.startswith("/api/v1/"):
+        return await call_next(request)
+    if os.getenv("POSTGRES_DSN"):
+        return JSONResponse(
+            {"detail": "当前 PostgreSQL 存储尚未支持 workspace 隔离，请使用 SQLite 多用户模式"},
+            status_code=503,
+        )
+    workspace = request.headers.get("x-workspace-id", "")
+    signature = request.headers.get("x-workspace-signature", "")
+    if not workspace or not signature or not hmac.compare_digest(signature, workspace_signature(workspace)):
+        return JSONResponse({"detail": "工作区身份无效"}, status_code=401)
+    try:
+        token = set_workspace_id(workspace)
+    except ValueError:
+        return JSONResponse({"detail": "工作区身份无效"}, status_code=401)
+    try:
+        return await call_next(request)
+    finally:
+        reset_workspace(token)
+
 # 默认允许所有来源；生产环境可通过 ALLOWED_ORIGINS 环境变量收紧
 _origins = os.getenv("ALLOWED_ORIGINS", "*").split(",")
 app.add_middleware(
@@ -127,22 +160,32 @@ app.add_middleware(
 app.include_router(content.router)
 app.include_router(knowledge.router)
 app.include_router(stats.router)
+app.include_router(sources.router)
 
 
 @app.get("/health", tags=["meta"])
 async def health():
     """就绪探针：检查 PostgreSQL 和 Redis 连接状态。"""
     from fastapi.responses import JSONResponse
-    checks = {"status": "ok", "postgres": "ok", "redis": "ok"}
+    checks = {"status": "ok", "postgres": "not_configured", "sqlite": "ok", "redis": "ok"}
 
-    try:
-        from knowledge_base.db import get_pool
-        pool = get_pool()
-        async with pool.acquire() as conn:
-            await conn.fetchval("SELECT 1")
-    except Exception:
-        checks["postgres"] = "unavailable"
-        checks["status"] = "degraded"
+    if os.getenv("POSTGRES_DSN"):
+        try:
+            from knowledge_base.db import get_pool
+            pool = get_pool()
+            async with pool.acquire() as conn:
+                await conn.fetchval("SELECT 1")
+            checks["postgres"] = "ok"
+        except Exception:
+            checks["postgres"] = "unavailable"
+            checks["status"] = "degraded"
+    else:
+        try:
+            from knowledge_base.local_repository import LocalContentRepository
+            conn = LocalContentRepository()._connect(); conn.execute("SELECT 1"); conn.close()
+        except Exception:
+            checks["sqlite"] = "unavailable"
+            checks["status"] = "degraded"
 
     try:
         from knowledge_base.cache import get_cache

@@ -25,8 +25,9 @@ RUN pip install --no-cache-dir -r requirements.txt \
 # Copy application source
 COPY api_server/ ./api_server/
 COPY knowledge_base/ ./knowledge_base/
+COPY dataradar/ ./dataradar/
 COPY config/ ./config/
 
 EXPOSE 8000
 
-CMD ["uvicorn", "api_server.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4", "--loop", "uvloop"]
+CMD ["uvicorn", "api_server.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--loop", "uvloop"]

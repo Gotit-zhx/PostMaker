@@ -5,29 +5,59 @@
 """
 
 import asyncio
+import os
 import re
+import shutil
 from pathlib import Path
 from typing import Dict, List, Optional
 
 from ruamel.yaml import YAML
+from dataradar.workspace import ensure_workspace_config, workspace_config_path, workspace_id
 
 
 class SourceManager:
     """管理 config.yaml 中的 RSS 源和 Web 采集目标。"""
 
     def __init__(self, config_path: str = None):
+        module_root = Path(__file__).resolve().parent.parent
         if config_path is None:
-            self.config_path = Path(__file__).parent.parent / "config" / "config.yaml"
+            if workspace_id() != "default":
+                self.config_path = ensure_workspace_config()
+            else:
+                configured_path = os.environ.get("CONFIG_PATH")
+                if configured_path:
+                    candidate = Path(configured_path)
+                    if candidate.is_absolute() or candidate.exists():
+                        self.config_path = candidate
+                    else:
+                        self.config_path = module_root / candidate
+                else:
+                    self.config_path = module_root / "config" / "config.yaml"
         else:
-            self.config_path = Path(config_path)
+            candidate = Path(config_path)
+            self.config_path = candidate if candidate.is_absolute() else Path.cwd() / candidate
 
         self._yaml = YAML()
         self._yaml.preserve_quotes = True
         self._yaml.width = 120
 
     def _load(self):
+        if not self.config_path.exists():
+            if workspace_id() != "default":
+                self.config_path = ensure_workspace_config()
+                with open(self.config_path, "r", encoding="utf-8") as f:
+                    return self._yaml.load(f) or {}
+            module_example = Path(__file__).resolve().parent.parent / "config" / "config.example.yaml"
+            local_example = self.config_path.with_name("config.example.yaml")
+            example_path = local_example if local_example.exists() else module_example
+            if not example_path.exists():
+                raise FileNotFoundError(
+                    f"配置文件 {self.config_path} 不存在，且未找到 config.example.yaml"
+                )
+            self.config_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(example_path, self.config_path)
         with open(self.config_path, "r", encoding="utf-8") as f:
-            return self._yaml.load(f)
+            return self._yaml.load(f) or {}
 
     def _save(self, data):
         with open(self.config_path, "w", encoding="utf-8") as f:
@@ -35,20 +65,50 @@ class SourceManager:
 
     @staticmethod
     def _auto_id(name: str) -> str:
-        """从 name 自动生成 kebab-case ID"""
+        """从名称生成稳定的 kebab-case ID。
+
+        中文名称没有可用的 ASCII 字符时，回退到名称中的域名或
+        ``custom-feed``。调用方会在写入前补充序号，避免多个中文源全部
+        命中同一个 ID。
+        """
         s = name.lower().strip()
-        s = re.sub(r"[^a-z0-9\s-]", "", s)
-        s = re.sub(r"[\s_]+", "-", s)
+        s = re.sub(r"[^a-z0-9]+", "-", s)
         s = re.sub(r"-+", "-", s).strip("-")
         return s or "custom-feed"
+
+    @classmethod
+    def _unique_id(cls, requested: Optional[str], name: str, url: str, existing_ids: set[str]) -> str:
+        """生成不冲突的源 ID，保留用户显式指定的 ID 语义。"""
+        if requested:
+            return requested
+        from urllib.parse import urlparse
+
+        parsed = urlparse(url)
+        base = cls._auto_id(name)
+        if base == "custom-feed" and parsed.hostname:
+            base = cls._auto_id(parsed.hostname) or base
+        candidate = base
+        suffix = 2
+        while candidate in existing_ids:
+            candidate = f"{base}-{suffix}"
+            suffix += 1
+        return candidate
+
+    @staticmethod
+    def _rss_feeds(data):
+        rss = data.setdefault("rss", {})
+        feeds = rss.get("feeds")
+        if not isinstance(feeds, list):
+            feeds = []
+            rss["feeds"] = feeds
+        return rss, feeds
 
     # ── RSS 源管理 ──────────────────────────────────────────────
 
     def list_feeds(self) -> List[Dict]:
         """列出所有 RSS 源及其状态"""
         data = self._load()
-        rss = data.get("rss", {})
-        feeds = rss.get("feeds", [])
+        _, feeds = self._rss_feeds(data)
 
         result = []
         for feed in feeds:
@@ -73,18 +133,19 @@ class SourceManager:
     ) -> Dict:
         """添加新 RSS 源到 config.yaml"""
         data = self._load()
-        rss = data.get("rss", {})
-        feeds = rss.get("feeds", [])
+        rss, feeds = self._rss_feeds(data)
 
         if not name:
             name = url.split("//")[-1].split("/")[0]
 
-        if not id:
-            id = self._auto_id(name)
-
         existing_ids = {f.get("id") for f in feeds}
+        id = self._unique_id(id, name, url, existing_ids)
         if id in existing_ids:
             raise ValueError(f"RSS 源 ID 已存在: {id}")
+
+        # 用户通过工作台添加第一个源时，即使模板曾被关闭全局 RSS，
+        # 也应让“保存并启用 → 立即采集”这条可视化链路立即生效。
+        rss["enabled"] = True
 
         new_feed = {
             "id": id,
@@ -102,11 +163,42 @@ class SourceManager:
 
         return {"id": id, "name": name, "url": url, "status": "added"}
 
+    def update_feed(
+        self,
+        feed_id: str,
+        url: str,
+        name: str = "",
+        max_age_days: int = 3,
+        enabled: bool = True,
+    ) -> Dict:
+        """更新已有 RSS 源，保留配置文件中的其他字段。"""
+        data = self._load()
+        rss, feeds = self._rss_feeds(data)
+        target = next((feed for feed in feeds if feed.get("id") == feed_id), None)
+        if target is None:
+            raise KeyError(f"找不到 RSS 源: {feed_id}")
+        target["url"] = url
+        target["name"] = name.strip() or url.split("//")[-1].split("/")[0]
+        target["max_age_days"] = max_age_days
+        if enabled:
+            target.pop("enabled", None)
+            rss["enabled"] = True
+        else:
+            target["enabled"] = False
+        self._save(data)
+        return {
+            "id": feed_id,
+            "name": target["name"],
+            "url": target["url"],
+            "enabled": enabled,
+            "max_age_days": max_age_days,
+            "status": "updated",
+        }
+
     def remove_feed(self, feed_id: str) -> bool:
         """从 config.yaml 删除 RSS 源"""
         data = self._load()
-        rss = data.get("rss", {})
-        feeds = rss.get("feeds", [])
+        rss, feeds = self._rss_feeds(data)
 
         original_len = len(feeds)
         rss["feeds"] = [f for f in feeds if f.get("id") != feed_id]
@@ -127,8 +219,7 @@ class SourceManager:
 
     def _set_feed_enabled(self, feed_id: str, enabled: bool) -> bool:
         data = self._load()
-        rss = data.get("rss", {})
-        feeds = rss.get("feeds", [])
+        _, feeds = self._rss_feeds(data)
 
         for feed in feeds:
             if feed.get("id") == feed_id:
@@ -149,8 +240,7 @@ class SourceManager:
 
         if not id_or_url.startswith(("http://", "https://")):
             data = self._load()
-            rss = data.get("rss", {})
-            feeds = rss.get("feeds", [])
+            _, feeds = self._rss_feeds(data)
             found = None
             for f in feeds:
                 if f.get("id") == id_or_url:

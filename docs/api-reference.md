@@ -8,6 +8,42 @@
 
 ---
 
+## 数据源与采集接口
+
+这些接口支持工作台中的 RSS 自助配置。配置写回 DataRadar 当前实例的 YAML 文件，采集任务也在当前进程内运行。
+
+### GET /api/v1/sources
+
+返回 RSS 和 Web 数据源：
+
+```json
+{"items": [{"kind": "rss", "id": "hacker-news", "name": "Hacker News", "url": "https://hnrss.org/frontpage", "enabled": true, "max_age_days": 1}], "count": 1}
+```
+
+### POST /api/v1/sources/rss
+
+添加 RSS 源。`url` 必须使用 `http://` 或 `https://`；`id` 可省略。
+
+```json
+{"url": "https://example.com/feed.xml", "name": "Example", "id": "example", "max_age_days": 3, "enabled": true}
+```
+
+成功返回 `201`；重复 ID 返回 `409`，字段校验失败返回 `422`。
+
+### POST /api/v1/sources/rss/test
+
+测试尚未保存的 RSS 地址，请求体只需要 `{"url": "https://example.com/feed.xml"}`。读取失败返回 `422`。
+
+### POST /api/v1/sources/{id}/test
+
+测试已保存的数据源。`/{id}/enable`、`/{id}/disable` 用于启停，`DELETE /api/v1/sources/{id}` 用于删除。
+
+### POST /api/v1/collect 与 GET /api/v1/collect/status
+
+启动一次后台采集并查询状态。启动成功返回 `202`；已有任务运行时返回 `409`。状态包括 `idle`、`running`、`completed` 和 `failed`，并包含 `job_id`、开始时间、结束时间和错误信息。
+
+---
+
 ## 内容接口
 
 ### GET /api/v1/content
@@ -581,3 +617,41 @@ API 服务启动后，可通过以下地址访问自动生成的交互式文档�
 
 - **Swagger UI**：`http://localhost:8000/docs`
 - **ReDoc**：`http://localhost:8000/redoc`
+
+
+## PostMaker 工作台接口
+
+以下接口由 PostMaker 工作台提供，基础 URL 为 `http://localhost:8787`。认证工作区启用后，浏览器 session 和 CSRF 校验仍然适用。
+
+### GET /api/platforms
+
+返回可用的平台适配器及其提示信息。
+
+### GET /api/source-presets
+
+返回面向新手的推荐来源。RSSHub 预置 URL 使用 `RSSHUB_SOURCE_BASE_URL` 生成；生产环境应指向 Docker 内部 RSSHub 服务。
+
+### POST /api/source-presets/{id}/enable
+
+将推荐来源写入当前 workspace 的 DataRadar RSS 配置。重复启用时由 DataRadar 返回冲突错误，用户可以在“数据源”页面处理。
+
+### POST /api/drafts/{id}/adapt
+
+将已批准草稿适配到目标平台。请求体：
+
+```json
+{"platform":"wechat"}
+```
+
+`platform` 可取 `wechat`、`zhihu`、`xiaohongshu`、`x`、`linkedin` 或 `generic`。未批准草稿返回 `409`，未知平台返回 `422`。响应统一包含：
+
+```json
+{
+  "platform": "xiaohongshu",
+  "title": "标题",
+  "body": "正文",
+  "hashtags": ["AI"],
+  "media": [{"url": "https://example.com/cover.jpg", "role": "inline"}],
+  "warnings": ["小红书建议至少准备 1 张竖版配图"]
+}
+```

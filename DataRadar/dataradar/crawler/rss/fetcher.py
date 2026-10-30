@@ -16,6 +16,7 @@ import httpx
 from .parser import RSSParser
 from dataradar.storage.base import RSSItem, RSSData
 from dataradar.utils.time import get_configured_time, is_within_days, DEFAULT_TIMEZONE
+from dataradar.utils.url_safety import UnsafeURL, validate_rss_redirect, validate_rss_url
 
 logger = logging.getLogger(__name__)
 
@@ -137,12 +138,24 @@ class RSSFetcher:
                 timeout=httpx.Timeout(self.timeout),
                 verify=False if (self.use_proxy and self.proxy_url) else True,
                 headers=self._headers,
+                follow_redirects=False,
                 **proxy_config,
             ) as client:
-                response = await client.get(feed.url)
+                current_url = feed.url
+                for redirect_count in range(6):
+                    current_url = await asyncio.to_thread(validate_rss_url, current_url)
+                    response = await client.get(current_url)
+                    if response.status_code not in {301, 302, 303, 307, 308}:
+                        break
+                    location = response.headers.get("location")
+                    if not location:
+                        response.raise_for_status()
+                    if redirect_count == 5:
+                        raise ValueError("RSS 地址重定向次数过多")
+                    current_url = await asyncio.to_thread(validate_rss_redirect, current_url, location)
                 response.raise_for_status()
 
-            parsed_items = await asyncio.to_thread(self.parser.parse, response.text, feed.url)
+            parsed_items = await asyncio.to_thread(self.parser.parse, response.text, current_url)
 
             # 限制条目数量（0=不限制）
             if feed.max_items > 0:
@@ -162,6 +175,12 @@ class RSSFetcher:
                     published_at=parsed.published_at or "",
                     summary=parsed.summary or "",
                     author=parsed.author or "",
+                    content_type=parsed.content_type or "text",
+                    enclosure_url=parsed.enclosure_url or "",
+                    enclosure_type=parsed.enclosure_type or "",
+                    enclosure_length=parsed.enclosure_length or 0,
+                    thumbnail_url=parsed.thumbnail_url or "",
+                    duration_sec=parsed.duration_sec or 0,
                     crawl_time=crawl_time,
                     first_time=crawl_time,
                     last_time=crawl_time,
@@ -181,6 +200,11 @@ class RSSFetcher:
 
         except httpx.HTTPError as e:
             error = f"请求失败: {e}"
+            logger.warning("[RSS] %s: %s", feed.name, error)
+            return [], error
+
+        except UnsafeURL as e:
+            error = f"不安全的 RSS 地址: {e}"
             logger.warning("[RSS] %s: %s", feed.name, error)
             return [], error
 

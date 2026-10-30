@@ -23,6 +23,7 @@ from typing import Any, Dict, List, Optional
 from urllib.parse import urljoin
 
 from dataradar.storage.base import RSSItem
+from dataradar.utils.url_safety import UnsafeURL, validate_public_url
 
 logger = logging.getLogger(__name__)
 
@@ -92,6 +93,10 @@ class PlaywrightScraper:
             stealth_async = None
 
         url = target["url"]
+        try:
+            url = validate_public_url(url)
+        except UnsafeURL as exc:
+            raise ValueError(f"不安全的网页采集地址：{exc}") from exc
         domain = urlparse(url).netloc
 
         # 域名限速
@@ -131,6 +136,11 @@ class PlaywrightScraper:
                     link_el = await entry.query_selector(link_sel) if link_sel else title_el
                     href = await link_el.get_attribute("href") if link_el else ""
                     full_url = urljoin(url, href) if href else ""
+                    if full_url:
+                        try:
+                            full_url = validate_public_url(full_url)
+                        except UnsafeURL:
+                            full_url = ""
                     if title:
                         items.append(RSSItem(
                             title=title,
@@ -162,7 +172,8 @@ class PlaywrightScraper:
                             title=entry["title"],
                             feed_id=f"web-{target['id']}",
                             feed_name=target.get("name", target["id"]),
-                            url=urljoin(url, entry.get("url", "")),
+                            url=(validate_public_url(urljoin(url, entry.get("url", "")))
+                                 if entry.get("url") else url),
                             summary=entry.get("summary", ""),
                             published_at=entry.get("published_date", ""),
                             crawl_time=crawl_time,

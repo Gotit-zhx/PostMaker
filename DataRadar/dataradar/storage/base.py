@@ -82,6 +82,14 @@ class RSSItem:
     full_text: str = ""                 # 全文（Trafilatura/Playwright/Jina 提取）
     ai_summary: str = ""                # AI 生成的结构化摘要
 
+    # 多媒体字段
+    content_type: str = "text"
+    enclosure_url: str = ""
+    enclosure_type: str = ""
+    enclosure_length: int = 0
+    thumbnail_url: str = ""
+    duration_sec: int = 0
+
     # AI 分析字段
     tags: List[str] = field(default_factory=list)    # AI 提取的关键词标签
     category: str = ""                  # AI 分类（AI/云计算/开源/...）
@@ -105,6 +113,12 @@ class RSSItem:
             "crawl_time": self.crawl_time,
             "full_text": self.full_text,
             "ai_summary": self.ai_summary,
+            "content_type": self.content_type,
+            "enclosure_url": self.enclosure_url,
+            "enclosure_type": self.enclosure_type,
+            "enclosure_length": self.enclosure_length,
+            "thumbnail_url": self.thumbnail_url,
+            "duration_sec": self.duration_sec,
             "tags": self.tags,
             "category": self.category,
             "importance_score": self.importance_score,
@@ -127,6 +141,12 @@ class RSSItem:
             crawl_time=data.get("crawl_time", ""),
             full_text=data.get("full_text", ""),
             ai_summary=data.get("ai_summary", ""),
+            content_type=data.get("content_type", "text"),
+            enclosure_url=data.get("enclosure_url", ""),
+            enclosure_type=data.get("enclosure_type", ""),
+            enclosure_length=data.get("enclosure_length", 0),
+            thumbnail_url=data.get("thumbnail_url", ""),
+            duration_sec=data.get("duration_sec", 0),
             tags=data.get("tags", []),
             category=data.get("category", ""),
             importance_score=data.get("importance_score", 0.0),

@@ -40,6 +40,13 @@ export AI_API_BASE=""                   # 可选，自定义 API 端点
 
 确保 DataRadar API 已在 `http://localhost:8000` 运行。
 
+也可以通过环境变量覆盖 DataRadar 地址：
+
+```bash
+export DATARADAR_API_BASE="http://127.0.0.1:18000"
+export DATARADAR_TIMEOUT=15
+```
+
 ### 生成内容
 
 ```bash
@@ -81,6 +88,19 @@ postmaker history [--persona X]
 # ── 配置 ──
 postmaker config [section]
 ```
+
+## 本地内容审核工作台（MVP）
+
+MVP 工作台把素材发现、persona 生成、人工编辑、审核状态、修订历史和 Markdown 导出放在一个本地页面中。草稿默认保存在 `output/workbench.sqlite3`，不要求配置 PostgreSQL；素材仍从 DataRadar API 获取。
+
+```bash
+# 确保 DataRadar API 已启动后执行
+uv run postmaker workbench
+```
+
+打开 <http://127.0.0.1:8787>。如果使用其他端口，可运行 `uv run postmaker workbench --port 9000`。也可以用 `POSTMAKER_WORKBENCH_DB=/path/to/workbench.sqlite3` 指定本地草稿数据库位置。
+
+当前 MVP 的状态流转是「待审核 → 已批准 / 已归档」，每次保存都会创建修订记录。批准后的草稿可从详情页导出 Markdown。工作台不会自动发布到任何平台。
 
 ## 人设系统
 
@@ -155,4 +175,4 @@ uv run pytest tests/ -v -m "not e2e"
 AI_API_KEY=... AI_MODEL=... uv run pytest tests/ -v
 ```
 
-当前测试覆盖：48 个测试（单元 + 集成），详见 [docs/testing.md](../docs/testing.md)
+当前测试覆盖：57 个通过、2 个 E2E 测试按标记排除，详见 [docs/testing.md](../docs/testing.md)

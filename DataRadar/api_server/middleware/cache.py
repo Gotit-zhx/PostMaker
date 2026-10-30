@@ -44,9 +44,10 @@ def cached_response(ttl: int = 300, prefix: str = "api"):
         @wraps(func)
         async def wrapper(*args, **kwargs):
             from knowledge_base.cache import get_cache
+            from dataradar.workspace import workspace_id
 
             # 根据所有调用参数构建稳定的缓存键
-            key_parts = [func.__name__] + [str(v) for v in args] + [
+            key_parts = [workspace_id(), func.__name__] + [str(v) for v in args] + [
                 f"{k}={v}" for k, v in sorted(kwargs.items())
             ]
             cache_key = _make_cache_key(prefix, *key_parts)

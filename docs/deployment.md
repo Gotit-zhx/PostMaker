@@ -16,7 +16,7 @@ cp .env.example .env     # 首次：编辑 .env 填入密码和 API Key
 docker compose up postgres redis -d
 ```
 
-可选启动 RSSHub 代理：
+公开 Compose 现在默认包含一个仅在内部网络可访问的 RSSHub 和 Redis 缓存。它用于把预置来源转换成 RSS，不会直接把 1200 端口暴露给公网。
 
 ```bash
 docker compose up postgres redis rsshub -d
@@ -74,6 +74,57 @@ scripts\setup.bat
 
 ---
 
+## 公开网页工作台（推荐的单机部署）
+
+如果目标是让普通用户直接打开网页完成数据源配置、采集、素材浏览、草稿生成和审核，请使用仓库根目录的 `docker-compose.public.yml`。该配置把 PostMaker 工作台作为唯一对外入口，DataRadar 只通过 Docker 内网访问，并使用 SQLite workspace 隔离注册用户的数据。
+
+### 启动
+
+```bash
+cd /path/to/PostMaker
+cp .env.public.example .env
+openssl rand -hex 32   # 将结果写入 .env 的 WORKSPACE_AUTH_SECRET
+docker compose -f docker-compose.public.yml up -d --build
+```
+
+启动后访问 `http://服务器地址:8787`。首次注册会创建账号和独立 workspace；之后该用户的 RSS 配置、采集素材、草稿和修订历史都会写入持久化卷。查看状态和日志：
+
+```bash
+docker compose -f docker-compose.public.yml ps
+docker compose -f docker-compose.public.yml logs -f postmaker
+docker compose -f docker-compose.public.yml logs -f dataradar
+```
+
+停止服务但保留数据：
+
+```bash
+docker compose -f docker-compose.public.yml down
+```
+
+删除服务和数据卷前请先备份：
+
+```bash
+docker compose -f docker-compose.public.yml down -v
+```
+
+### 公开部署配置
+
+| 变量 | 必填 | 说明 |
+|------|------|------|
+| `WORKSPACE_AUTH_SECRET` | 是 | 两个服务共享的 HMAC 密钥；必须使用强随机值 |
+| `POSTMAKER_PORT` | 否 | 工作台对外端口，默认 `8787` |
+| `POSTMAKER_COOKIE_SECURE` | HTTPS 时是 | HTTPS 反向代理后设置为 `true` |
+| `AI_API_KEY` | 生成内容时需要 | 可选；采集和浏览素材不需要模型密钥 |
+| `AI_API_BASE`、`AI_MODEL` | 否 | LiteLLM 兼容端点和模型名称 |
+
+不要把 `.env` 提交到 Git，也不要把 API key 写进 YAML 或 Dockerfile。正式环境建议在 Nginx、Caddy 或云负载均衡器中配置 HTTPS，并将 DataRadar 的 `8000` 端口保持为内部端口。
+
+该 Compose 文件适合单机或小规模部署。当前 workspace 隔离依赖 SQLite 文件，采集任务状态保存在 DataRadar API 进程内存，因此服务固定使用单 worker。多实例、高并发部署需要先把数据仓储加入 workspace 字段或 schema 隔离，并把采集任务迁移到共享队列和持久化状态。
+
+`DataRadar/config/config.example.yaml` 默认关闭本机代理和 Playwright 网页采集，适合云服务器直接启动。需要代理时请显式设置 `advanced.rss.use_proxy`、`advanced.rss.proxy_url` 和 `web_scraper.proxy_url`，不要沿用不存在的 `127.0.0.1:7890` 服务。
+
+---
+
 ## Docker 全栈部署
 
 ### 服务架构
@@ -104,8 +155,8 @@ scripts\setup.bat
 |------|------|------|------|
 | postgres | pgvector/pgvector:pg16 | 5432 | PostgreSQL 16 + pgvector 扩展 |
 | redis | redis:7-alpine | 6379 | 缓存，512MB LRU 策略 |
-| rsshub | diygod/rsshub:latest | 1200 | RSSHub 代理（可选） |
-| api-server | 自构建 | 8000（内部） | FastAPI 4 workers + uvloop |
+| rsshub | diygod/rsshub:latest | 1200 | RSSHub 代理（可选，仅 Docker 内网） |
+| api-server | 自构建 | 8000（内部） | FastAPI 单 worker + uvloop |
 | nginx | nginx:alpine | 8000（外部） | 反向代理 |
 
 ### 启动
@@ -132,25 +183,40 @@ docker compose up postgres redis rsshub -d
 
 | 变量 | 必填 | 默认值 | 说明 |
 |------|------|--------|------|
-| `AI_API_KEY` | 是 | — | LLM API 密钥（用于 AI 摘要） |
+| `AI_API_KEY` | 否 | — | LLM API 密钥（启用 AI 摘要时需要） |
 | `AI_MODEL` | 否 | config.yaml 中的值 | LLM 模型（LiteLLM 格式，如 `openai/gpt-4o`） |
 | `AI_API_BASE` | 否 | — | 自定义 API 端点 |
-| `POSTGRES_DSN` | 是 | — | PostgreSQL 连接串 |
+| `POSTGRES_DSN` | 否 | — | PostgreSQL 连接串；不设置时使用 SQLite |
 | `REDIS_URL` | 否 | — | Redis 连接串（无则跳过缓存） |
 | `EMBED_MODEL` | 否 | — | 嵌入模型（启用语义搜索） |
 | `EMBED_API_KEY` | 否 | `OPENAI_API_KEY` | 嵌入 API 密钥 |
 | `EMBED_API_BASE` | 否 | — | 嵌入 API 端点 |
 | `ALLOWED_ORIGINS` | 否 | `*` | CORS 允许来源（逗号分隔） |
 | `POSTGRES_PASSWORD` | 否 | `dataradar_secret` | Docker 中 PostgreSQL 密码 |
+| `DATARADAR_AUTH_REQUIRED` | 否 | `false` | 拒绝缺少有效 workspace 签名的 API 请求 |
+| `DATARADAR_WORKSPACES_DIR` | 否 | `output/workspaces` | SQLite 多用户数据根目录 |
+| `WORKSPACE_AUTH_SECRET` | 多用户时必填 | — | 与 PostMaker 共享的 HMAC 密钥 |
 
 ### PostMaker
 
 | 变量 | 必填 | 默认值 | 说明 |
 |------|------|--------|------|
-| `AI_API_KEY` | 是 | — | LLM API 密钥（用于内容生成） |
+| `AI_API_KEY` | 生成时需要 | — | LLM API 密钥（仅生成内容时需要） |
 | `AI_MODEL` | 否 | config.yaml 中的值 | LLM 模型 |
 | `AI_API_BASE` | 否 | — | 自定义 API 端点 |
 | `POSTGRES_DSN` | 否 | — | PostgreSQL 连接串（启用去重和历史） |
+| `POSTMAKER_AUTH_REQUIRED` | 否 | `false` | 强制登录才能访问工作台 API |
+| `POSTMAKER_AUTH_DB` | 否 | `PostMaker/output/auth.sqlite3` | 用户和 session 数据库 |
+| `POSTMAKER_WORKSPACES_DIR` | 否 | `output/workspaces` | 工作台草稿数据库根目录 |
+| `POSTMAKER_COOKIE_SECURE` | HTTPS 时必填 | `false` | 设置后浏览器仅通过 HTTPS 发送 session cookie |
+| `WORKSPACE_AUTH_SECRET` | 多用户时必填 | — | 与 DataRadar 使用相同的强随机密钥 |
+| `RSSHUB_SOURCE_BASE_URL` | RSSHub 预置来源时需要 | `http://localhost:1200` | 工作台生成推荐 RSSHub URL 的地址；公开 Compose 使用 `http://rsshub:1200` |
+
+### 多用户 SQLite 部署
+
+PostMaker 和 DataRadar 必须共享同一 `WORKSPACE_AUTH_SECRET`，并同时启用 `POSTMAKER_AUTH_REQUIRED=true`、`DATARADAR_AUTH_REQUIRED=true`。工作台的 session cookie 使用 `HttpOnly`、`SameSite=Lax` 和 CSRF token；HTTPS 部署还必须设置 `POSTMAKER_COOKIE_SECURE=true`。将 `POSTMAKER_AUTH_DB`、`POSTMAKER_WORKSPACES_DIR` 和 `DATARADAR_WORKSPACES_DIR` 指向持久化磁盘，并限制 DataRadar API 只允许 PostMaker 服务访问。
+
+该隔离实现以 SQLite 独立文件为边界。PostgreSQL repositories 仍是单库模式。DataRadar 的采集状态保存在 API 进程内存，Docker Compose 和文档中的启动命令固定为单 worker；在迁移到共享任务队列和持久化状态前，不要直接增加 worker 或把多个 API 实例放到负载均衡后。
 
 ---
 
@@ -231,7 +297,7 @@ uv run dataradar schedule --interval 240    # 每 240 分钟
 
 ### API 服务
 
-- 默认 4 个 uvicorn worker，可根据 CPU 核数调整
+- 当前默认单个 uvicorn worker；采集状态仍保存在进程内存，多 worker 需要先迁移任务状态
 - Docker 中使用 uvloop 提升异步性能
 - Nginx 反向代理提供额外的缓冲和连接管理
 

@@ -1,0 +1,10 @@
+.git
+.pytest_cache
+**/__pycache__
+**/.venv
+frontend/node_modules
+frontend/dist
+PostMaker/output
+DataRadar/output
+*.sqlite3
+*.log

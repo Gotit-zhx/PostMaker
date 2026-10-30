@@ -1,13 +1,13 @@
 # DataRadar
 
-**数据采集与知识库系统** — 从 RSS 源和网页采集内容，经全文提取和 AI 结构化摘要后直写 PostgreSQL，提供 REST API 和语义搜索。
+**数据采集与知识库系统** — 从 RSS 源和网页采集内容，经全文提取和可选的 AI 结构化摘要后写入 PostgreSQL 或本地 SQLite，提供 REST API 和语义搜索。
 
 ## 核心流程
 
 ```
 RSS 源（15+）─────────────────┐
   直接 RSS + RSSHub 代理      │
-                              ├─→ 全文提取 → AI 结构化摘要 → PostgreSQL 直写
+                              ├─→ 全文提取 → AI 结构化摘要（可选） → PostgreSQL / SQLite
 Playwright 网页采集（可选）────┘                                     │
                                                               后处理（可选）
                                                           embedding + 聚合
@@ -62,6 +62,15 @@ cp .env.example .env            # 首次：编辑 .env
 docker compose up postgres redis -d   # 启动 PostgreSQL + Redis
 ```
 
+没有 PostgreSQL 时可直接使用 SQLite 完成本地开发和联调：
+
+```bash
+DATARADAR_SQLITE_PATH=/tmp/dataradar.sqlite3 \
+uv run uvicorn api_server.main:app --host 127.0.0.1 --port 8000
+```
+
+SQLite 是无 `POSTGRES_DSN` 时的默认后端；采集器、REST API 和 `dataradar rss` 查询命令共用同一个文件。生产环境仍建议使用 PostgreSQL、Redis 和 pgvector。
+
 ### 运行采集
 
 ```bash
@@ -75,13 +84,15 @@ uv run dataradar status         # 查看状态
 # Mac/Linux:
 POSTGRES_DSN="postgresql://dataradar:dataradar_secret@localhost:5432/knowledge_base" \
 REDIS_URL="redis://localhost:6379/0" \
-uv run uvicorn api_server.main:app --host 0.0.0.0 --port 8000 --workers 4
+uv run uvicorn api_server.main:app --host 0.0.0.0 --port 8000 --workers 1
 
 # Windows:
 set POSTGRES_DSN=postgresql://dataradar:dataradar_secret@localhost:5432/knowledge_base
 set REDIS_URL=redis://localhost:6379/0
-uv run uvicorn api_server.main:app --host 0.0.0.0 --port 8000 --workers 4
+uv run uvicorn api_server.main:app --host 0.0.0.0 --port 8000 --workers 1
 ```
+
+数据源采集状态目前保存在 API 进程内存中，因此默认使用单 worker，保证工作台查询到的任务状态与实际采集任务一致。扩展到多 worker 前，需要先把采集任务和状态迁移到共享队列及持久化存储。
 
 ---
 
