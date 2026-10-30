@@ -266,7 +266,7 @@ export POSTMAKER_COOKIE_SECURE=true
 
 先启动 DataRadar，再启动 PostMaker。第一次打开工作台时选择“注册”，之后使用邮箱和密码登录。每个账号会自动获得一个 workspace；RSS 配置、采集素材、草稿和修订分别存放在该 workspace 的 SQLite 文件中。浏览器不能自行指定 workspace，PostMaker 会把服务端 session 对应的 workspace 以签名 header 传给 DataRadar。
 
-这种模式适合小规模单机部署。PostgreSQL 当前仍是单库模型，采集状态仍在 DataRadar 进程内，多 worker 或正式多租户部署前需要共享任务队列和 workspace 级数据库设计。
+这种模式适合小规模单机部署。PostgreSQL 当前仍是单库模型，采集状态仍在 DataRadar 进程内，因此 Compose 和手动启动都应使用单 worker。扩展到多 worker 或正式多租户部署前，需要先加入共享任务队列、持久化任务状态和 workspace 级数据库设计。
 
 首次创建 workspace 时，DataRadar 会从配置模板建立该用户自己的配置文件，但会把 RSS feeds 和网页 targets 初始化为空。即使进程环境中存在 `CONFIG_PATH`，认证 workspace 也不会读取默认用户或仓库级配置中的数据源。
 
@@ -319,7 +319,7 @@ uv run dataradar kb stats
 3. 点击“保存数据源”，源会写入 DataRadar 配置并默认启用。
 4. 点击“立即采集”，页面会显示运行中、完成或失败状态；采集完成后回到“素材发现”刷新列表。
 
-已保存的源支持再次测试、启用、停用和删除。工作台通过 PostMaker 代理访问 DataRadar，因此浏览器只需要访问 `8787` 端口。每个 workspace 有自己的 RSS 配置、素材库和采集状态；采集状态保存在当前 DataRadar 进程内，多 worker 部署需要外部共享任务队列。
+已保存的源支持再次测试、启用、停用和删除。工作台通过 PostMaker 代理访问 DataRadar，因此浏览器只需要访问 `8787` 端口。每个 workspace 有自己的 RSS 配置、素材库和采集状态；采集状态保存在当前 DataRadar 进程内，默认单 worker 部署可以保持状态一致，多 worker 部署需要外部共享任务队列。
 
 空工作区首次打开时会看到“三步完成第一篇内容”引导。按“添加 RSS → 立即采集 → 生成并导出”的顺序操作即可；如果素材列表仍为空，先在“数据源”页面检查源状态和采集任务状态，再回到“素材发现”点击刷新。
 

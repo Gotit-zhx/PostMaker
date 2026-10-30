@@ -40,6 +40,7 @@ DATARADAR_API_BASE=http://127.0.0.1:18000 \
 - 工作台测试覆盖：生成草稿 → 待审核 → 编辑 → 批准 → Markdown 导出 → 修订恢复。
 - 工作台代理测试覆盖：数据源列表、新增和测试 RSS、已保存源测试、启停、删除、立即采集和状态查询。
 - DataRadar 数据源测试覆盖：源生命周期、URL 校验、首次访问时从模板初始化配置、`CONFIG_PATH` 读取以及采集重复触发保护。
+- 新增 PostMaker → DataRadar 跨服务集成测试，验证工作台代理正确传递 workspace 签名、两个 workspace 的 RSS 源互不可见。
 - `dataradar rss --status`、`--search` 和默认查询在 SQLite 模式下均可运行。
 
 ## 已修复问题
@@ -64,8 +65,8 @@ DATARADAR_API_BASE=http://127.0.0.1:18000 \
 ## 测试结果
 
 ```text
-DataRadar: 75 passed
-PostMaker: 55 passed, 2 deselected (e2e)
+DataRadar: 77 passed
+PostMaker: 57 passed, 2 deselected (e2e)
 compileall: passed
 git diff --check: passed
 ```
@@ -78,7 +79,7 @@ git diff --check: passed
 - Redis 未配置时健康检查会显示 `redis: unavailable`，但本地 API 仍可工作；生产部署需要 Redis 或调整健康探针策略。
 - 语义搜索需要配置 embedding 模型和 API key，本次没有调用模型。
 - 工作台支持注册登录、CSRF 和 SQLite workspace 隔离，但团队权限、并发编辑冲突处理和发布平台适配尚未实现；当前版本仍不适合作为面向公众的托管 SaaS 直接开放。
-- 认证模式下，数据源配置和素材数据库按 workspace 持久化，采集状态仍保存在 DataRadar 单进程内存，多 worker 部署需要共享任务队列。
+- 认证模式下，数据源配置和素材数据库按 workspace 持久化，采集状态仍保存在 DataRadar 单进程内存；Docker Compose 已固定为单 worker，多 worker 部署需要先接入共享任务队列和持久化状态。
 - SQLite 适合单机开发和小规模部署；PostgreSQL 当前仍是单库模型，正式多租户部署前需要加入 workspace 字段或独立 schema。
 - `mark_used` 当前只记录素材与 persona 的关系，尚未在列表响应中展示“已使用”状态。
 

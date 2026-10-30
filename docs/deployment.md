@@ -164,7 +164,7 @@ docker compose up postgres redis rsshub -d
 
 PostMaker 和 DataRadar 必须共享同一 `WORKSPACE_AUTH_SECRET`，并同时启用 `POSTMAKER_AUTH_REQUIRED=true`、`DATARADAR_AUTH_REQUIRED=true`。工作台的 session cookie 使用 `HttpOnly`、`SameSite=Lax` 和 CSRF token；HTTPS 部署还必须设置 `POSTMAKER_COOKIE_SECURE=true`。将 `POSTMAKER_AUTH_DB`、`POSTMAKER_WORKSPACES_DIR` 和 `DATARADAR_WORKSPACES_DIR` 指向持久化磁盘，并限制 DataRadar API 只允许 PostMaker 服务访问。
 
-该隔离实现以 SQLite 独立文件为边界。PostgreSQL repositories 仍是单库模式，DataRadar 多 worker 的采集状态也仍在进程内，因此这些模式尚不能作为多租户生产后端。
+该隔离实现以 SQLite 独立文件为边界。PostgreSQL repositories 仍是单库模式。DataRadar 的采集状态保存在 API 进程内存，Docker Compose 和文档中的启动命令固定为单 worker；在迁移到共享任务队列和持久化状态前，不要直接增加 worker 或把多个 API 实例放到负载均衡后。
 
 ---
 

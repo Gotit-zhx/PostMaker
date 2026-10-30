@@ -84,13 +84,15 @@ uv run dataradar status         # 查看状态
 # Mac/Linux:
 POSTGRES_DSN="postgresql://dataradar:dataradar_secret@localhost:5432/knowledge_base" \
 REDIS_URL="redis://localhost:6379/0" \
-uv run uvicorn api_server.main:app --host 0.0.0.0 --port 8000 --workers 4
+uv run uvicorn api_server.main:app --host 0.0.0.0 --port 8000 --workers 1
 
 # Windows:
 set POSTGRES_DSN=postgresql://dataradar:dataradar_secret@localhost:5432/knowledge_base
 set REDIS_URL=redis://localhost:6379/0
-uv run uvicorn api_server.main:app --host 0.0.0.0 --port 8000 --workers 4
+uv run uvicorn api_server.main:app --host 0.0.0.0 --port 8000 --workers 1
 ```
+
+数据源采集状态目前保存在 API 进程内存中，因此默认使用单 worker，保证工作台查询到的任务状态与实际采集任务一致。扩展到多 worker 前，需要先把采集任务和状态迁移到共享队列及持久化存储。
 
 ---
 
