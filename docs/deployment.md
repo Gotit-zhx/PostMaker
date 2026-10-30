@@ -74,6 +74,55 @@ scripts\setup.bat
 
 ---
 
+## 公开网页工作台（推荐的单机部署）
+
+如果目标是让普通用户直接打开网页完成数据源配置、采集、素材浏览、草稿生成和审核，请使用仓库根目录的 `docker-compose.public.yml`。该配置把 PostMaker 工作台作为唯一对外入口，DataRadar 只通过 Docker 内网访问，并使用 SQLite workspace 隔离注册用户的数据。
+
+### 启动
+
+```bash
+cd /path/to/PostMaker
+cp .env.public.example .env
+openssl rand -hex 32   # 将结果写入 .env 的 WORKSPACE_AUTH_SECRET
+docker compose -f docker-compose.public.yml up -d --build
+```
+
+启动后访问 `http://服务器地址:8787`。首次注册会创建账号和独立 workspace；之后该用户的 RSS 配置、采集素材、草稿和修订历史都会写入持久化卷。查看状态和日志：
+
+```bash
+docker compose -f docker-compose.public.yml ps
+docker compose -f docker-compose.public.yml logs -f postmaker
+docker compose -f docker-compose.public.yml logs -f dataradar
+```
+
+停止服务但保留数据：
+
+```bash
+docker compose -f docker-compose.public.yml down
+```
+
+删除服务和数据卷前请先备份：
+
+```bash
+docker compose -f docker-compose.public.yml down -v
+```
+
+### 公开部署配置
+
+| 变量 | 必填 | 说明 |
+|------|------|------|
+| `WORKSPACE_AUTH_SECRET` | 是 | 两个服务共享的 HMAC 密钥；必须使用强随机值 |
+| `POSTMAKER_PORT` | 否 | 工作台对外端口，默认 `8787` |
+| `POSTMAKER_COOKIE_SECURE` | HTTPS 时是 | HTTPS 反向代理后设置为 `true` |
+| `AI_API_KEY` | 生成内容时需要 | 可选；采集和浏览素材不需要模型密钥 |
+| `AI_API_BASE`、`AI_MODEL` | 否 | LiteLLM 兼容端点和模型名称 |
+
+不要把 `.env` 提交到 Git，也不要把 API key 写进 YAML 或 Dockerfile。正式环境建议在 Nginx、Caddy 或云负载均衡器中配置 HTTPS，并将 DataRadar 的 `8000` 端口保持为内部端口。
+
+该 Compose 文件适合单机或小规模部署。当前 workspace 隔离依赖 SQLite 文件，采集任务状态保存在 DataRadar API 进程内存，因此服务固定使用单 worker。多实例、高并发部署需要先把数据仓储加入 workspace 字段或 schema 隔离，并把采集任务迁移到共享队列和持久化状态。
+
+---
+
 ## Docker 全栈部署
 
 ### 服务架构
@@ -105,7 +154,7 @@ scripts\setup.bat
 | postgres | pgvector/pgvector:pg16 | 5432 | PostgreSQL 16 + pgvector 扩展 |
 | redis | redis:7-alpine | 6379 | 缓存，512MB LRU 策略 |
 | rsshub | diygod/rsshub:latest | 1200 | RSSHub 代理（可选） |
-| api-server | 自构建 | 8000（内部） | FastAPI 4 workers + uvloop |
+| api-server | 自构建 | 8000（内部） | FastAPI 单 worker + uvloop |
 | nginx | nginx:alpine | 8000（外部） | 反向代理 |
 
 ### 启动
@@ -245,7 +294,7 @@ uv run dataradar schedule --interval 240    # 每 240 分钟
 
 ### API 服务
 
-- 默认 4 个 uvicorn worker，可根据 CPU 核数调整
+- 当前默认单个 uvicorn worker；采集状态仍保存在进程内存，多 worker 需要先迁移任务状态
 - Docker 中使用 uvloop 提升异步性能
 - Nginx 反向代理提供额外的缓冲和连接管理
 

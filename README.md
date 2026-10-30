@@ -19,6 +19,7 @@ Markdown / HTML ← 导出 ← 人工审核 ← PostMaker 生成草稿
 
 - [功能](#功能)
 - [快速开始](#快速开始)
+- [公开网页部署](#公开网页部署)
 - [CLI 示例](#cli-示例)
 - [配置概览](#配置概览)
 - [文档](#文档)
@@ -85,6 +86,20 @@ uv run postmaker workbench
 打开 <http://127.0.0.1:8787>，进入“数据源”添加 RSS，测试并保存后点击“立即采集”；采集完成后到“素材发现”选择素材和 persona，生成草稿，经人工编辑、批准后导出 Markdown。采集与浏览不需要 AI 密钥；只有 AI 摘要或生成步骤需要模型配置。
 
 首次使用的完整步骤、认证工作区配置和故障排查见[中文操作指南](docs/user-guide.md)。
+
+### 公开网页部署
+
+仓库提供了一套面向单机或小规模团队的公开工作台 Compose 配置。它使用 SQLite 为每个注册用户创建独立 workspace，由 PostMaker 提供网页入口，DataRadar 只在内部网络提供 API：
+
+```bash
+cp .env.public.example .env
+# 编辑 .env，将 WORKSPACE_AUTH_SECRET 换成 openssl rand -hex 32 生成的随机值
+docker compose -f docker-compose.public.yml up -d --build
+```
+
+浏览器访问 <http://127.0.0.1:8787>，注册后即可按“添加数据源 → 采集 → 浏览素材 → 生成草稿 → 审核 → 导出”操作。停止服务使用 `docker compose -f docker-compose.public.yml down`；数据保存在 `public_data` 卷中。需要 HTTPS 时，应在反向代理中终止 TLS，并将 `POSTMAKER_COOKIE_SECURE=true`。
+
+完整部署说明、环境变量和升级注意事项见[部署指南](docs/deployment.md)。
 
 ## CLI 示例
 
