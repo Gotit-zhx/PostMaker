@@ -1,4 +1,4 @@
-const state = { view: "materials", mode: "trending", materials: [], personas: [], selectedMaterial: null, drafts: [], selectedDraft: null, revisionsOpen: false, sources: [], collectionPoll: null, user: null };
+const state = { view: "materials", mode: "trending", materials: [], personas: [], selectedMaterial: null, drafts: [], draftCount: 0, selectedDraft: null, revisionsOpen: false, sources: [], collectionPoll: null, user: null };
 const $ = (selector) => document.querySelector(selector);
 const escapeHtml = (value = "") => String(value).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
 const niceDate = (value) => { if (!value) return "时间未知"; const date = new Date(value); return Number.isNaN(date.getTime()) ? String(value).slice(0, 10) : date.toLocaleDateString("zh-CN", { month: "short", day: "numeric" }); };
@@ -7,7 +7,7 @@ function cookie(name) { return document.cookie.split("; ").find((part) => part.s
 function showAuthScreen(show) { $("#auth-screen").classList.toggle("hidden", !show); document.querySelector(".shell").classList.toggle("hidden", show); }
 async function api(path, options = {}) { const method = (options.method || "GET").toUpperCase(); const headers = { ...(options.body ? { "Content-Type": "application/json" } : {}), ...options.headers }; if (!["GET", "HEAD", "OPTIONS"].includes(method)) { const csrf = cookie("pm_csrf"); if (csrf) headers["X-CSRF-Token"] = csrf; } const response = await fetch(path, { ...options, headers }); let data; try { data = await response.json(); } catch { data = await response.text(); } if (response.status === 401) showAuthScreen(true); if (!response.ok) throw new Error(data?.detail || data || `请求失败 (${response.status})`); return data; }
 function setAuthMode(register) { $("#auth-title").textContent = register ? "创建工作区" : "登录工作台"; $("#auth-subtitle").textContent = register ? "注册后即可拥有独立的数据源、素材和草稿。" : "登录后管理你的独立内容工作区。"; $("#auth-submit").textContent = register ? "注册并进入" : "登录"; $("#auth-password").autocomplete = register ? "new-password" : "current-password"; $("#auth-switch").textContent = register ? "已有账号？登录" : "还没有账号？注册"; }
-async function submitAuth(event) { event.preventDefault(); const register = $("#auth-submit").textContent.includes("注册"); const result = $("#auth-result"); const button = $("#auth-submit"); button.disabled = true; result.textContent = ""; try { const data = await api(register ? "/api/auth/register" : "/api/auth/login", { method: "POST", body: JSON.stringify({ email: $("#auth-email").value.trim(), password: $("#auth-password").value }) }); state.user = data.user; $("#user-email").textContent = data.user?.email || ""; $("#logout-button").classList.remove("hidden"); showAuthScreen(false); await Promise.all([loadMaterials(), loadDraftCount()]); toast(register ? "工作区已创建" : "登录成功"); } catch (error) { result.className = "form-result error"; result.textContent = error.message; } finally { button.disabled = false; } }
+async function submitAuth(event) { event.preventDefault(); const register = $("#auth-submit").textContent.includes("注册"); const result = $("#auth-result"); const button = $("#auth-submit"); button.disabled = true; result.textContent = ""; try { const data = await api(register ? "/api/auth/register" : "/api/auth/login", { method: "POST", body: JSON.stringify({ email: $("#auth-email").value.trim(), password: $("#auth-password").value }) }); state.user = data.user; $("#user-email").textContent = data.user?.email || ""; $("#logout-button").classList.remove("hidden"); showAuthScreen(false); await Promise.all([loadMaterials(), loadDraftCount(), loadSources()]); updateGettingStarted(); toast(register ? "工作区已创建" : "登录成功"); } catch (error) { result.className = "form-result error"; result.textContent = error.message; } finally { button.disabled = false; } }
 function setView(view) {
   state.view = view;
   $("#materials-view").classList.toggle("hidden", view !== "materials"); $("#drafts-view").classList.toggle("hidden", view !== "drafts"); $("#sources-view").classList.toggle("hidden", view !== "sources");
@@ -20,17 +20,25 @@ function setView(view) {
   if (view === "drafts") loadDrafts();
   if (view === "sources") loadSources();
 }
+function updateGettingStarted() {
+  const node = $("#getting-started");
+  if (!node) return;
+  const firstRun = state.sources.length === 0 && state.materials.length === 0 && state.draftCount === 0;
+  node.classList.toggle("hidden", !firstRun || state.view !== "materials");
+}
 function renderMaterials() {
   const host = $("#material-list"); $("#material-count").textContent = state.materials.length;
   $("#material-meta").textContent = `${state.materials.length} 条素材 · ${state.mode === "trending" ? "热门" : "最新"}`;
   if (!state.materials.length) { host.innerHTML = '<div class="empty-inline">暂时没有素材。请确认 DataRadar 已启动并完成采集。</div>'; return; }
   host.innerHTML = state.materials.map((item) => `<button class="material-item ${state.selectedMaterial?.id === item.id ? "selected" : ""}" data-material-id="${Number(item.id)}"><span class="item-title">${escapeHtml(item.title || "未命名素材")}</span><span class="item-meta"><span>${escapeHtml(item.source_platform || "未知来源")}</span><span>·</span><span>${niceDate(item.published_at)}</span><span class="tag">${escapeHtml(item.category || "未分类")}</span><span class="score">重要性 ${Number(item.importance_score || 0).toFixed(1)}</span></span></button>`).join("");
   host.querySelectorAll("[data-material-id]").forEach((button) => button.addEventListener("click", () => selectMaterial(Number(button.dataset.materialId))));
+  updateGettingStarted();
 }
 async function loadMaterials() {
   const host = $("#material-list"); host.innerHTML = '<div class="loading">正在连接 DataRadar…</div>';
   try { const result = await api(`/api/materials?mode=${state.mode}&limit=40`); state.materials = result.items || []; renderMaterials(); if (state.selectedMaterial) await selectMaterial(state.selectedMaterial.id); }
   catch (error) { host.innerHTML = `<div class="empty-inline">${escapeHtml(error.message)}<br>启动 DataRadar API 后可加载素材。</div>`; $("#material-meta").textContent = "连接失败"; }
+  updateGettingStarted();
 }
 
 function sourceStatusLabel(source) { return source.enabled ? "已启用" : "已停用"; }
@@ -41,11 +49,12 @@ function renderSources() {
   host.querySelectorAll("[data-source-test]").forEach((button) => button.addEventListener("click", () => testSavedSource(button.dataset.sourceTest, button)));
   host.querySelectorAll("[data-source-toggle]").forEach((button) => button.addEventListener("click", () => toggleSource(button.dataset.sourceToggle, button.dataset.enabled === "true")));
   host.querySelectorAll("[data-source-delete]").forEach((button) => button.addEventListener("click", () => deleteSource(button.dataset.sourceDelete)));
+  updateGettingStarted();
 }
 async function loadSources() {
   const host = $("#source-list"); host.innerHTML = '<div class="loading">正在读取数据源…</div>';
   try { const result = await api("/api/sources"); state.sources = result.items || []; renderSources(); await loadCollectionStatus(); }
-  catch (error) { host.innerHTML = `<div class="empty-inline">读取数据源失败：${escapeHtml(error.message)}<br>请确认 DataRadar API 已启动。</div>`; $("#source-meta").textContent = "连接失败"; $("#source-count").textContent = "!"; }
+  catch (error) { host.innerHTML = `<div class="empty-inline">读取数据源失败：${escapeHtml(error.message)}<br>请确认 DataRadar API 已启动。</div>`; $("#source-meta").textContent = "连接失败"; $("#source-count").textContent = "!"; updateGettingStarted(); }
 }
 function sourcePayload() {
   const id = $("#source-id").value.trim();
@@ -109,7 +118,7 @@ async function generateDraft() {
   try { await api("/api/drafts/generate", { method: "POST", body: JSON.stringify({ material_id: Number(state.selectedMaterial.id), persona_id: personaId }) }); toast("草稿已生成，进入待审核列表"); await loadDraftCount(); setView("drafts"); }
   catch (error) { toast(error.message); button.disabled = false; button.textContent = "生成审核草稿　→"; }
 }
-async function loadDraftCount() { try { const result = await api("/api/drafts?status=all&limit=300"); $("#draft-count").textContent = result.items.length; } catch { /* keep the last visible count */ } }
+async function loadDraftCount() { try { const result = await api("/api/drafts?status=all&limit=300"); state.draftCount = result.items.length; $("#draft-count").textContent = state.draftCount; } catch { /* keep the last visible count */ } updateGettingStarted(); }
 async function loadDrafts() {
   const host = $("#draft-list"); host.innerHTML = '<div class="loading">正在读取本地草稿…</div>';
   try { const filter = $("#status-filter").value; const result = await api(`/api/drafts?status=${encodeURIComponent(filter)}&limit=200`); state.drafts = result.items || []; $("#draft-count").textContent = (await api("/api/drafts?status=all&limit=300")).items.length; renderDrafts(); }
@@ -160,7 +169,7 @@ async function boot() {
   document.querySelectorAll(".nav-item").forEach((button) => button.addEventListener("click", () => setView(button.dataset.view)));
   $("#toggle-view").addEventListener("click", () => setView(state.view === "materials" ? "drafts" : "materials"));
   $("#refresh").addEventListener("click", () => state.view === "materials" ? loadMaterials() : state.view === "drafts" ? loadDrafts() : loadSources());
-  $("#load-more").addEventListener("click", loadMaterials); $("#refresh-drafts").addEventListener("click", loadDrafts); $("#refresh-sources").addEventListener("click", loadSources); $("#collect-now").addEventListener("click", collectNow); $("#test-source").addEventListener("click", testNewSource); $("#source-form").addEventListener("submit", saveSource);
+  $("#load-more").addEventListener("click", loadMaterials); $("#refresh-drafts").addEventListener("click", loadDrafts); $("#refresh-sources").addEventListener("click", loadSources); $("#collect-now").addEventListener("click", collectNow); $("#test-source").addEventListener("click", testNewSource); $("#source-form").addEventListener("submit", saveSource); $("#setup-sources").addEventListener("click", () => setView("sources"));
   $("#status-filter").addEventListener("change", loadDrafts);
   document.querySelectorAll("[data-mode]").forEach((button) => button.addEventListener("click", () => { state.mode = button.dataset.mode; document.querySelectorAll("[data-mode]").forEach((item) => item.classList.toggle("selected", item === button)); loadMaterials(); }));
   $("#auth-form").addEventListener("submit", submitAuth);
@@ -169,6 +178,6 @@ async function boot() {
   let authRequired = false;
   try { authRequired = Boolean((await api("/api/health")).auth_required); } catch { /* API unavailable is shown by the data panels. */ }
   try { const me = await api("/api/auth/me"); if (me.authenticated) { state.user = me.user; $("#user-email").textContent = me.user?.email || ""; $("#logout-button").classList.remove("hidden"); } else if (authRequired) showAuthScreen(true); } catch { if (authRequired) showAuthScreen(true); }
-  if (!authRequired || state.user) { try { state.personas = await api("/api/personas"); } catch (error) { toast(`读取 persona 失败：${error.message}`); } await Promise.all([loadMaterials(), loadDraftCount()]); }
+  if (!authRequired || state.user) { try { state.personas = await api("/api/personas"); } catch (error) { toast(`读取 persona 失败：${error.message}`); } await Promise.all([loadMaterials(), loadDraftCount(), loadSources()]); updateGettingStarted(); }
 }
 boot();

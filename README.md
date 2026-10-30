@@ -13,6 +13,18 @@ PostMaker · DataRadar 是一个面向个人创作者和小型内容团队的本
 
 项目采用 **DataRadar 负责找素材，PostMaker 负责写内容** 的分层设计：采集和生成可以单独运行，也可以通过本地 API 和审核工作台组成完整闭环。
 
+## 目录
+
+- [项目状态](#项目状态)
+- [功能](#功能)
+- [5 分钟启动本地闭环](#5-分钟启动本地闭环)
+- [常用命令](#常用命令)
+- [配置与模型](#配置与模型)
+- [安全与部署边界](#安全与部署边界)
+- [项目结构](#项目结构)
+- [文档](#文档)
+- [开发与贡献](#开发与贡献)
+
 ```text
 RSS / 网页
    │
@@ -38,7 +50,11 @@ PostMaker：persona 匹配 → LLM 生成 → 人工编辑审核 → Markdown / 
 
 项目当前是 **local-first MVP**：核心采集、检索、生成、人工审核和导出链路已经可以在单机上运行，也支持通过环境变量启用账号登录、独立工作区和 CSRF 防护。数据源页面支持在浏览器中完成 RSS 的测试、保存、启停和立即采集。
 
+当前可用的最短闭环是：注册或登录工作台（认证模式）→ 添加 RSS → 测试并保存 → 立即采集 → 查看素材 → 选择 persona 生成草稿 → 编辑、批准 → 导出 Markdown。匿名本地模式可以跳过登录，适合单人开发和调试。
+
 SQLite 工作区隔离适合个人用户和小规模部署；PostgreSQL 多租户字段、共享任务队列、并发编辑冲突处理和外部发布渠道仍属于后续增强项。公网部署时请启用认证、HTTPS、限流和密钥管理。
+
+> 这是一个可运行的内容生产原型，不是开箱即用的公网 SaaS。生产部署前请阅读 [部署指南](docs/deployment.md) 和 [完整链路审计](docs/full-chain-audit-report.md)。
 
 ## 功能
 
@@ -151,6 +167,8 @@ uv run postmaker workbench
 
 工作台草稿默认保存在 `PostMaker/output/workbench.sqlite3`。启用认证后，用户数据写入 `POSTMAKER_WORKSPACES_DIR/<workspace-id>/`，DataRadar 数据写入 `DATARADAR_WORKSPACES_DIR/<workspace-id>/`。它不会自动发布到公众号、知乎、小红书等外部平台。
 
+首次进入空工作区时，工作台会显示三步引导。添加数据源、出现素材或生成草稿后，引导会自动隐藏。
+
 ## 常用命令
 
 以下命令需要在对应子项目目录中执行。
@@ -239,7 +257,7 @@ uv run postmaker workbench --port 9000          # 使用其他端口启动工作
 
 ## 文档
 
-- [中文操作指南](docs/user-guide.md)：从安装、配置、采集到生成、审核、导出和排障
+- [中文操作指南](docs/user-guide.md)：面向第一次使用者的完整步骤、页面操作、CLI、部署、备份和排障
 - [系统架构](docs/architecture.md)：组件、数据流和存储设计
 - [REST API 参考](docs/api-reference.md)：DataRadar API 路径、字段和请求示例
 - [部署指南](docs/deployment.md)：Docker、环境变量、定时采集和生产部署

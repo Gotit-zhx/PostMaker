@@ -7,6 +7,8 @@ import pytest
 
 from api_server.main import app
 from dataradar.storage import get_storage_manager
+from dataradar.core.loader import load_config
+from dataradar.source_manager import SourceManager
 from dataradar.workspace import reset_workspace, set_workspace_id, workspace_signature
 from knowledge_base.local_repository import LocalContentRepository
 
@@ -50,6 +52,26 @@ def test_storage_manager_cache_key_includes_workspace(tmp_path, monkeypatch):
     assert manager_a.db_path != manager_b.db_path
     asyncio.run(manager_a.close())
     asyncio.run(manager_b.close())
+
+
+def test_workspace_bootstrap_does_not_copy_shared_sources(tmp_path, monkeypatch):
+    monkeypatch.setenv("DATARADAR_WORKSPACES_DIR", str(tmp_path / "workspaces"))
+    shared_config = tmp_path / "shared-config.yaml"
+    shared_config.write_text(
+        "rss:\n  feeds:\n    - id: shared\n      name: Shared\n      url: https://shared.example/feed.xml\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CONFIG_PATH", str(shared_config))
+    token = set_workspace_id("ws_new_user")
+    try:
+        manager = SourceManager()
+        assert manager.list_feeds() == []
+        assert manager.list_targets() == []
+        config = load_config()
+        assert config["RSS"]["FEEDS"] == []
+        assert config["WEB_SCRAPER"]["TARGETS"] == []
+    finally:
+        reset_workspace(token)
 
 
 @pytest.mark.asyncio

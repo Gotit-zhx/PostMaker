@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from ruamel.yaml import YAML
-from dataradar.workspace import workspace_config_path, workspace_id
+from dataradar.workspace import ensure_workspace_config, workspace_config_path, workspace_id
 
 
 class SourceManager:
@@ -21,17 +21,18 @@ class SourceManager:
     def __init__(self, config_path: str = None):
         module_root = Path(__file__).resolve().parent.parent
         if config_path is None:
-            configured_path = os.environ.get("CONFIG_PATH")
-            if configured_path:
-                candidate = Path(configured_path)
-                if candidate.is_absolute() or candidate.exists():
-                    self.config_path = candidate
-                else:
-                    self.config_path = module_root / candidate
-            elif workspace_id() != "default":
-                self.config_path = workspace_config_path()
+            if workspace_id() != "default":
+                self.config_path = ensure_workspace_config()
             else:
-                self.config_path = module_root / "config" / "config.yaml"
+                configured_path = os.environ.get("CONFIG_PATH")
+                if configured_path:
+                    candidate = Path(configured_path)
+                    if candidate.is_absolute() or candidate.exists():
+                        self.config_path = candidate
+                    else:
+                        self.config_path = module_root / candidate
+                else:
+                    self.config_path = module_root / "config" / "config.yaml"
         else:
             candidate = Path(config_path)
             self.config_path = candidate if candidate.is_absolute() else Path.cwd() / candidate
@@ -42,6 +43,10 @@ class SourceManager:
 
     def _load(self):
         if not self.config_path.exists():
+            if workspace_id() != "default":
+                self.config_path = ensure_workspace_config()
+                with open(self.config_path, "r", encoding="utf-8") as f:
+                    return self._yaml.load(f) or {}
             module_example = Path(__file__).resolve().parent.parent / "config" / "config.example.yaml"
             local_example = self.config_path.with_name("config.example.yaml")
             example_path = local_example if local_example.exists() else module_example
