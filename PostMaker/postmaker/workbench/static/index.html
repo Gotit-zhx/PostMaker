@@ -14,6 +14,7 @@
       <div class="workspace-label">工作区</div>
       <button class="nav-item active" data-view="materials"><span class="nav-icon">◈</span>素材库 <span class="nav-count" id="material-count">—</span></button>
       <button class="nav-item" data-view="drafts"><span class="nav-icon">▤</span>内容草稿 <span class="nav-count" id="draft-count">0</span></button>
+      <button class="nav-item" data-view="sources"><span class="nav-icon">⚙</span>数据源 <span class="nav-count" id="source-count">—</span></button>
       <div class="sidebar-bottom"><div class="local-badge"><span class="status-dot"></span><span><b>本地工作区</b><small>内容仅保存在此设备</small></span></div><a href="/api/health" target="_blank">服务状态 ↗</a></div>
     </aside>
 
@@ -37,6 +38,28 @@
           <div class="panel-footer"><span id="draft-meta">本地 SQLite</span><button class="text-button" id="refresh-drafts">刷新 ↻</button></div>
         </section>
         <section class="panel editor-panel" id="draft-detail"><div class="empty-state"><div class="empty-icon">▤</div><h3>选择一篇草稿</h3><p>你可以编辑、批准、归档或导出 Markdown。</p></div></section>
+      </div>
+      <div class="workspace sources-workspace hidden" id="sources-view">
+        <section class="panel source-panel source-settings-panel">
+          <div class="panel-header"><div><h2>已配置的数据源</h2><p>添加、测试和管理 RSS 源</p></div><button id="refresh-sources" class="text-button">刷新 ↻</button></div>
+          <div id="source-list" class="item-list"><div class="loading">正在读取数据源…</div></div>
+          <div class="panel-footer"><span id="source-meta">—</span><button id="collect-now" class="button primary compact">立即采集</button></div>
+        </section>
+        <section class="panel settings-panel">
+          <div class="panel-header"><div><h2>添加 RSS 源</h2><p>只需要填写名称和 RSS 地址，不必编辑 YAML</p></div></div>
+          <form id="source-form" class="settings-form">
+            <div class="form-help">RSS 是网站提供的订阅地址，通常以 <code>.xml</code>、<code>/feed</code> 或 <code>/rss</code> 结尾。</div>
+            <label>源名称<input id="source-name" maxlength="200" placeholder="例如：少数派" required></label>
+            <label>RSS 地址<input id="source-url" type="url" maxlength="2000" placeholder="https://example.com/feed.xml" required></label>
+            <label>源 ID <span class="optional">可选，留空自动生成</span><input id="source-id" maxlength="80" pattern="[A-Za-z0-9][A-Za-z0-9_-]*" placeholder="例如：sspai"></label>
+            <label>保留最近多少天的文章<input id="source-age" type="number" min="0" max="3650" value="3"><span class="field-hint">填 0 表示不按时间过滤。</span></label>
+            <div class="form-actions"><button type="button" id="test-source" class="button secondary">测试地址</button><button type="submit" class="button primary">保存并启用</button></div>
+            <div id="source-test-result" class="form-result" role="status"></div>
+          </form>
+        </section>
+        <section class="panel collection-panel hidden" id="collection-status-panel">
+          <div class="panel-header"><div><h2>采集任务</h2><p id="collection-status-text">—</p></div></div>
+        </section>
       </div>
       <div id="toast" class="toast" role="status"></div>
     </main>

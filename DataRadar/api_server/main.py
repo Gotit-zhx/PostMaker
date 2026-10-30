@@ -24,6 +24,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api_server.routers import content, knowledge, stats
+from api_server.routers import sources
 
 logger = logging.getLogger(__name__)
 
@@ -127,6 +128,7 @@ app.add_middleware(
 app.include_router(content.router)
 app.include_router(knowledge.router)
 app.include_router(stats.router)
+app.include_router(sources.router)
 
 
 @app.get("/health", tags=["meta"])

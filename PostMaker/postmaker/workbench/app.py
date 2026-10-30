@@ -16,6 +16,7 @@ from postmaker.integrations.dataradar_client import DataRadarClient
 from postmaker.persona.loader import load_all_personas
 from postmaker.workbench.store import WorkbenchStore
 from postmaker.content.generator import ContentGenerator
+import httpx
 
 _STATIC = Path(__file__).parent / "static"
 app = FastAPI(title="PostMaker Workbench", version="0.1.0")
@@ -51,6 +52,71 @@ async def index():
 @app.get("/api/health")
 async def health():
     return {"status": "ok", "storage": "sqlite", "database": str(store.path)}
+
+
+async def _dataradar_request(method: str, path: str, **kwargs):
+    cfg = load_config()
+    client_cfg = cfg.get("dataradar", {})
+    api_base = client_cfg.get("api_base", "http://localhost:8000").rstrip("/")
+    timeout = client_cfg.get("timeout", 15)
+    try:
+        async with httpx.AsyncClient(base_url=api_base, timeout=timeout) as client:
+            response = await client.request(method, path, **kwargs)
+            response.raise_for_status()
+            return response.json() if response.content else {}
+    except httpx.HTTPStatusError as exc:
+        try:
+            detail = exc.response.json().get("detail", exc.response.text)
+        except Exception:
+            detail = exc.response.text
+        raise HTTPException(status_code=exc.response.status_code, detail=detail) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"无法连接 DataRadar ({api_base})：{exc}") from exc
+
+
+@app.get("/api/sources")
+async def sources():
+    return await _dataradar_request("GET", "/api/v1/sources")
+
+
+@app.post("/api/sources/rss", status_code=201)
+async def add_rss_source(payload: dict):
+    return await _dataradar_request("POST", "/api/v1/sources/rss", json=payload)
+
+
+@app.post("/api/sources/rss/test")
+async def test_rss_source(payload: dict):
+    return await _dataradar_request("POST", "/api/v1/sources/rss/test", json=payload)
+
+
+@app.post("/api/sources/{source_id}/test")
+async def test_source(source_id: str):
+    return await _dataradar_request("POST", f"/api/v1/sources/{source_id}/test")
+
+
+@app.post("/api/sources/{source_id}/enable")
+async def enable_source(source_id: str):
+    return await _dataradar_request("POST", f"/api/v1/sources/{source_id}/enable")
+
+
+@app.post("/api/sources/{source_id}/disable")
+async def disable_source(source_id: str):
+    return await _dataradar_request("POST", f"/api/v1/sources/{source_id}/disable")
+
+
+@app.delete("/api/sources/{source_id}")
+async def delete_source(source_id: str):
+    return await _dataradar_request("DELETE", f"/api/v1/sources/{source_id}")
+
+
+@app.post("/api/collect", status_code=202)
+async def trigger_collection():
+    return await _dataradar_request("POST", "/api/v1/collect")
+
+
+@app.get("/api/collect/status")
+async def collect_status():
+    return await _dataradar_request("GET", "/api/v1/collect/status")
 
 
 @app.get("/api/personas")

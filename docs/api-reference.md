@@ -8,6 +8,42 @@
 
 ---
 
+## 数据源与采集接口
+
+这些接口支持工作台中的 RSS 自助配置。配置写回 DataRadar 当前实例的 YAML 文件，采集任务也在当前进程内运行。
+
+### GET /api/v1/sources
+
+返回 RSS 和 Web 数据源：
+
+```json
+{"items": [{"kind": "rss", "id": "hacker-news", "name": "Hacker News", "url": "https://hnrss.org/frontpage", "enabled": true, "max_age_days": 1}], "count": 1}
+```
+
+### POST /api/v1/sources/rss
+
+添加 RSS 源。`url` 必须使用 `http://` 或 `https://`；`id` 可省略。
+
+```json
+{"url": "https://example.com/feed.xml", "name": "Example", "id": "example", "max_age_days": 3, "enabled": true}
+```
+
+成功返回 `201`；重复 ID 返回 `409`，字段校验失败返回 `422`。
+
+### POST /api/v1/sources/rss/test
+
+测试尚未保存的 RSS 地址，请求体只需要 `{"url": "https://example.com/feed.xml"}`。读取失败返回 `422`。
+
+### POST /api/v1/sources/{id}/test
+
+测试已保存的数据源。`/{id}/enable`、`/{id}/disable` 用于启停，`DELETE /api/v1/sources/{id}` 用于删除。
+
+### POST /api/v1/collect 与 GET /api/v1/collect/status
+
+启动一次后台采集并查询状态。启动成功返回 `202`；已有任务运行时返回 `409`。状态包括 `idle`、`running`、`completed` 和 `failed`，并包含 `job_id`、开始时间、结束时间和错误信息。
+
+---
+
 ## 内容接口
 
 ### GET /api/v1/content
