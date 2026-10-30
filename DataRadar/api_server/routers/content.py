@@ -29,7 +29,9 @@ import os
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/content", tags=["content"])
-_repo = ContentRepository() if os.getenv("POSTGRES_DSN") else LocalContentRepository()
+def _repo():
+    """按请求创建仓储，避免 workspace 在模块导入时被固定。"""
+    return ContentRepository() if os.getenv("POSTGRES_DSN") else LocalContentRepository()
 
 
 # ── 辅助函数 ──────────────────────────────────────────────────────
@@ -70,11 +72,12 @@ async def list_content(
     """
     from datetime import date as date_cls
     date_str = date
-    if date_str is None and isinstance(_repo, LocalContentRepository):
-        date_str = await _repo.get_latest_date()
+    repo = _repo()
+    if date_str is None and isinstance(repo, LocalContentRepository):
+        date_str = await repo.get_latest_date()
     date_str = date_str or date_cls.today().isoformat()
 
-    rows = await _repo.list_by_date(
+    rows = await repo.list_by_date(
         date_str,
         content_type=content_type,
         platform=platform,
@@ -101,7 +104,7 @@ async def search_content(
     limit: int = Query(default=20, ge=1, le=50),
 ):
     """基于 pg_trgm 的全文三元组相似度搜索，匹配标题和正文。"""
-    rows = await _repo.search_fulltext(q, content_type=content_type, limit=limit)
+    rows = await _repo().search_fulltext(q, content_type=content_type, limit=limit)
     return ContentSearchResponse(
         items=[_to_summary(r) for r in rows],
         query=q,
@@ -128,7 +131,7 @@ async def semantic_search(body: SemanticSearchRequest):
     if not vec:
         raise HTTPException(status_code=502, detail="Embedding generation failed.")
 
-    rows = await _repo.search_semantic(
+    rows = await _repo().search_semantic(
         vec,
         content_type=body.content_type,
         date_from=body.date_from,
@@ -147,10 +150,11 @@ async def get_trending(
     """获取指定日期的热门内容，按重要性分数排序。"""
     from datetime import date as date_cls
     date_str = date
-    if date_str is None and isinstance(_repo, LocalContentRepository):
-        date_str = await _repo.get_latest_date()
+    repo = _repo()
+    if date_str is None and isinstance(repo, LocalContentRepository):
+        date_str = await repo.get_latest_date()
     date_str = date_str or date_cls.today().isoformat()
-    rows = await _repo.get_trending(date_str, content_type=content_type, limit=limit)
+    rows = await repo.get_trending(date_str, content_type=content_type, limit=limit)
     return ContentListResponse(
         items=[_to_summary(r) for r in rows],
         meta=PageMeta(limit=limit),
@@ -167,10 +171,11 @@ async def get_trending_topics(
     """按分类聚合的热门主题，含数量、来源数、平均重要性。"""
     from datetime import date as date_cls
     date_str = date
-    if date_str is None and isinstance(_repo, LocalContentRepository):
-        date_str = await _repo.get_latest_date()
+    repo = _repo()
+    if date_str is None and isinstance(repo, LocalContentRepository):
+        date_str = await repo.get_latest_date()
     date_str = date_str or date_cls.today().isoformat()
-    rows = await _repo.get_trending_topics(date_str, days=days, limit=limit)
+    rows = await repo.get_trending_topics(date_str, days=days, limit=limit)
     topics = []
     for r in rows:
         top_tags = r.get("top_tags") or []
@@ -196,10 +201,11 @@ async def get_content_bundle(
     """获取某主题分类下的素材包。"""
     from datetime import date as date_cls
     date_str = date
-    if date_str is None and isinstance(_repo, LocalContentRepository):
-        date_str = await _repo.get_latest_date()
+    repo = _repo()
+    if date_str is None and isinstance(repo, LocalContentRepository):
+        date_str = await repo.get_latest_date()
     date_str = date_str or date_cls.today().isoformat()
-    rows = await _repo.list_by_category(date_str, category=category, limit=limit)
+    rows = await repo.list_by_category(date_str, category=category, limit=limit)
     return ContentBundleResponse(
         category=category,
         items=[_to_summary(r) for r in rows],
@@ -210,10 +216,11 @@ async def get_content_bundle(
 @router.post("/{content_id}/mark_used")
 async def mark_content_used(content_id: int, body: MarkUsedRequest):
     """标记素材已被某人设使用。"""
-    row = await _repo.get_by_id(content_id)
+    repo = _repo()
+    row = await repo.get_by_id(content_id)
     if not row:
         raise HTTPException(status_code=404, detail="Content item not found.")
-    await _repo.mark_used(content_id, body.persona_id)
+    await repo.mark_used(content_id, body.persona_id)
     return {"ok": True, "content_id": content_id, "persona_id": body.persona_id}
 
 
@@ -221,7 +228,7 @@ async def mark_content_used(content_id: int, body: MarkUsedRequest):
 @cached_response(ttl=1800, prefix="content_detail")
 async def get_content(content_id: int):
     """根据 ID 获取单个内容条目，包含完整正文和图片。"""
-    row = await _repo.get_by_id(content_id)
+    row = await _repo().get_by_id(content_id)
     if not row:
         raise HTTPException(status_code=404, detail="Content item not found.")
     return ContentItemDetail(

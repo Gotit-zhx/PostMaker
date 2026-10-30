@@ -1,9 +1,13 @@
-const state = { view: "materials", mode: "trending", materials: [], personas: [], selectedMaterial: null, drafts: [], selectedDraft: null, revisionsOpen: false, sources: [], collectionPoll: null };
+const state = { view: "materials", mode: "trending", materials: [], personas: [], selectedMaterial: null, drafts: [], selectedDraft: null, revisionsOpen: false, sources: [], collectionPoll: null, user: null };
 const $ = (selector) => document.querySelector(selector);
 const escapeHtml = (value = "") => String(value).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
 const niceDate = (value) => { if (!value) return "时间未知"; const date = new Date(value); return Number.isNaN(date.getTime()) ? String(value).slice(0, 10) : date.toLocaleDateString("zh-CN", { month: "short", day: "numeric" }); };
 const toast = (message) => { const node = $("#toast"); node.textContent = message; node.classList.add("show"); clearTimeout(toast.timer); toast.timer = setTimeout(() => node.classList.remove("show"), 2600); };
-async function api(path, options = {}) { const response = await fetch(path, { ...options, headers: { ...(options.body ? { "Content-Type": "application/json" } : {}), ...options.headers } }); let data; try { data = await response.json(); } catch { data = await response.text(); } if (!response.ok) throw new Error(data?.detail || data || `请求失败 (${response.status})`); return data; }
+function cookie(name) { return document.cookie.split("; ").find((part) => part.startsWith(`${name}=`))?.slice(name.length + 1) || ""; }
+function showAuthScreen(show) { $("#auth-screen").classList.toggle("hidden", !show); document.querySelector(".shell").classList.toggle("hidden", show); }
+async function api(path, options = {}) { const method = (options.method || "GET").toUpperCase(); const headers = { ...(options.body ? { "Content-Type": "application/json" } : {}), ...options.headers }; if (!["GET", "HEAD", "OPTIONS"].includes(method)) { const csrf = cookie("pm_csrf"); if (csrf) headers["X-CSRF-Token"] = csrf; } const response = await fetch(path, { ...options, headers }); let data; try { data = await response.json(); } catch { data = await response.text(); } if (response.status === 401) showAuthScreen(true); if (!response.ok) throw new Error(data?.detail || data || `请求失败 (${response.status})`); return data; }
+function setAuthMode(register) { $("#auth-title").textContent = register ? "创建工作区" : "登录工作台"; $("#auth-subtitle").textContent = register ? "注册后即可拥有独立的数据源、素材和草稿。" : "登录后管理你的独立内容工作区。"; $("#auth-submit").textContent = register ? "注册并进入" : "登录"; $("#auth-password").autocomplete = register ? "new-password" : "current-password"; $("#auth-switch").textContent = register ? "已有账号？登录" : "还没有账号？注册"; }
+async function submitAuth(event) { event.preventDefault(); const register = $("#auth-submit").textContent.includes("注册"); const result = $("#auth-result"); const button = $("#auth-submit"); button.disabled = true; result.textContent = ""; try { const data = await api(register ? "/api/auth/register" : "/api/auth/login", { method: "POST", body: JSON.stringify({ email: $("#auth-email").value.trim(), password: $("#auth-password").value }) }); state.user = data.user; $("#user-email").textContent = data.user?.email || ""; $("#logout-button").classList.remove("hidden"); showAuthScreen(false); await Promise.all([loadMaterials(), loadDraftCount()]); toast(register ? "工作区已创建" : "登录成功"); } catch (error) { result.className = "form-result error"; result.textContent = error.message; } finally { button.disabled = false; } }
 function setView(view) {
   state.view = view;
   $("#materials-view").classList.toggle("hidden", view !== "materials"); $("#drafts-view").classList.toggle("hidden", view !== "drafts"); $("#sources-view").classList.toggle("hidden", view !== "sources");
@@ -159,7 +163,12 @@ async function boot() {
   $("#load-more").addEventListener("click", loadMaterials); $("#refresh-drafts").addEventListener("click", loadDrafts); $("#refresh-sources").addEventListener("click", loadSources); $("#collect-now").addEventListener("click", collectNow); $("#test-source").addEventListener("click", testNewSource); $("#source-form").addEventListener("submit", saveSource);
   $("#status-filter").addEventListener("change", loadDrafts);
   document.querySelectorAll("[data-mode]").forEach((button) => button.addEventListener("click", () => { state.mode = button.dataset.mode; document.querySelectorAll("[data-mode]").forEach((item) => item.classList.toggle("selected", item === button)); loadMaterials(); }));
-  try { state.personas = await api("/api/personas"); } catch (error) { toast(`读取 persona 失败：${error.message}`); }
-  await Promise.all([loadMaterials(), loadDraftCount()]);
+  $("#auth-form").addEventListener("submit", submitAuth);
+  $("#auth-switch").addEventListener("click", () => setAuthMode($("#auth-submit").textContent.includes("登录")));
+  $("#logout-button").addEventListener("click", async () => { try { await api("/api/auth/logout", { method: "POST" }); state.user = null; $("#logout-button").classList.add("hidden"); showAuthScreen(true); setAuthMode(false); } catch (error) { toast(error.message); } });
+  let authRequired = false;
+  try { authRequired = Boolean((await api("/api/health")).auth_required); } catch { /* API unavailable is shown by the data panels. */ }
+  try { const me = await api("/api/auth/me"); if (me.authenticated) { state.user = me.user; $("#user-email").textContent = me.user?.email || ""; $("#logout-button").classList.remove("hidden"); } else if (authRequired) showAuthScreen(true); } catch { if (authRequired) showAuthScreen(true); }
+  if (!authRequired || state.user) { try { state.personas = await api("/api/personas"); } catch (error) { toast(`读取 persona 失败：${error.message}`); } await Promise.all([loadMaterials(), loadDraftCount()]); }
 }
 boot();

@@ -36,9 +36,9 @@ PostMaker：persona 匹配 → LLM 生成 → 人工编辑审核 → Markdown / 
 
 ## 项目状态
 
-项目当前是 **local-first MVP**：核心采集、检索、生成、人工审核和导出链路已经可以在单机上运行，适合个人使用、功能评估和二次开发。数据源页面支持在浏览器中完成 RSS 的测试、保存、启停和立即采集。
+项目当前是 **local-first MVP**：核心采集、检索、生成、人工审核和导出链路已经可以在单机上运行，也支持通过环境变量启用账号登录、独立工作区和 CSRF 防护。数据源页面支持在浏览器中完成 RSS 的测试、保存、启停和立即采集。
 
-生产化部署仍需要补齐登录认证、租户权限、共享任务队列、并发编辑冲突处理和外部发布渠道适配。请把当前版本当作可运行的技术底座，不要直接暴露到公网作为无认证 SaaS。
+SQLite 工作区隔离适合个人用户和小规模部署；PostgreSQL 多租户字段、共享任务队列、并发编辑冲突处理和外部发布渠道仍属于后续增强项。公网部署时请启用认证、HTTPS、限流和密钥管理。
 
 ## 功能
 
@@ -59,6 +59,7 @@ PostMaker：persona 匹配 → LLM 生成 → 人工编辑审核 → Markdown / 
 - 输出带 frontmatter 的 Markdown 和内联 CSS HTML。
 - 支持素材与 persona 组合去重，以及 PostgreSQL 生成历史。
 - 提供本地审核工作台：发现素材、选择 persona、生成草稿、编辑、保存修订、批准、归档和导出 Markdown。
+- 可选启用账号注册/登录；每个用户拥有独立的 RSS 配置、采集状态、素材 SQLite 和草稿 SQLite。
 
 ## 5 分钟启动本地闭环
 
@@ -148,7 +149,7 @@ uv run postmaker workbench
 5. 确认事实和来源后批准草稿，或将其归档。
 6. 在已批准草稿中导出 Markdown。
 
-工作台草稿默认保存在 `PostMaker/output/workbench.sqlite3`。它当前是单用户本地工作台，不会自动发布到公众号、知乎、小红书等外部平台。
+工作台草稿默认保存在 `PostMaker/output/workbench.sqlite3`。启用认证后，用户数据写入 `POSTMAKER_WORKSPACES_DIR/<workspace-id>/`，DataRadar 数据写入 `DATARADAR_WORKSPACES_DIR/<workspace-id>/`。它不会自动发布到公众号、知乎、小红书等外部平台。
 
 ## 常用命令
 
@@ -198,14 +199,21 @@ uv run postmaker workbench --port 9000          # 使用其他端口启动工作
 | `AI_API_BASE` | OpenAI 兼容服务地址 | 使用代理或第三方服务时设置 |
 | `DATARADAR_API_BASE` | PostMaker 访问 DataRadar 的地址 | 默认 `http://localhost:8000` |
 | `POSTGRES_DSN` / `REDIS_URL` | PostgreSQL 和 Redis 连接 | 扩展部署时设置 |
+| `POSTMAKER_AUTH_REQUIRED` | 是否强制工作台登录 | 生产环境设为 `true` |
+| `DATARADAR_AUTH_REQUIRED` | 是否要求 DataRadar workspace 签名 | 与工作台认证一起设为 `true` |
+| `WORKSPACE_AUTH_SECRET` | 两个服务共享的签名密钥 | 使用强随机字符串，必须一致 |
+| `POSTMAKER_AUTH_DB` | 用户和 session 数据库 | 默认 `PostMaker/output/auth.sqlite3` |
+| `POSTMAKER_WORKSPACES_DIR` / `DATARADAR_WORKSPACES_DIR` | 用户工作区根目录 | 生产环境使用独立持久化目录 |
+| `POSTMAKER_COOKIE_SECURE` | 是否只通过 HTTPS 发送 cookie | HTTPS 部署设为 `true` |
 
 模型调用不是运行采集 API 的必要条件。可以先关闭 AI 摘要，验证采集、存储和搜索，再用低成本模型完成筛选和初稿；`--refine` 会增加一次模型调用，建议只对少量重要稿件使用。
 
 ## 安全与部署边界
 
 - 通过网页或 API 添加的 RSS 地址会校验协议、端口、域名解析结果和重定向目标，localhost、内网地址、保留地址和带凭据的 URL 会被拒绝。
-- 当前工作台和数据源配置默认是单用户本地模式；DataRadar 的采集任务状态保存在当前进程内。
-- API 默认没有登录认证。需要对外提供服务时，应先接入身份认证、权限控制、HTTPS、限流、审计日志和安全的密钥管理。
+- 默认仍是匿名开发模式；生产环境请设置 `POSTMAKER_AUTH_REQUIRED=true`、`DATARADAR_AUTH_REQUIRED=true` 和强随机 `WORKSPACE_AUTH_SECRET`。
+- 认证模式下，工作台通过签名 header 将服务端决定的 workspace 传给 DataRadar；客户端不能自行选择 workspace。采集任务状态仍保存在当前 DataRadar 进程内，多 worker 部署需要共享任务队列。
+- 当前 PostgreSQL 仓储仍按单库设计，正式多租户部署前应增加 `workspace_id` 字段或独立 schema。
 - 不要把 API key 写入 Git 跟踪的 YAML、README、日志或导出的文章；优先使用环境变量或部署平台的密钥存储。
 
 ## 项目结构
@@ -275,12 +283,12 @@ git merge --no-ff feature/<简短描述>
 
 ## 当前边界与下一步
 
-- 工作台是单用户本地审核工具，当前没有登录、团队权限和并发编辑冲突处理。
-- 工作台现在提供“数据源”页面，可直接添加、测试、启用、停用和删除 RSS 源，并在页面中启动采集任务。
+- 工作台默认是匿名本地模式，也可以启用账号登录、CSRF 防护和按用户隔离的 SQLite 工作区；团队权限、邀请和并发编辑冲突处理仍未实现。
+- 工作台提供“数据源”页面，可直接添加、测试、启用、停用和删除 RSS 源，并在页面中启动采集任务。
 - 自动发布适配器尚未实现，批准后的内容需要人工复制或由后续渠道适配器处理。
 - 语义搜索需要额外配置 embedding 模型和 API key。
-- SQLite 适合本地开发和小规模单机使用；多进程或高并发场景应切换 PostgreSQL。
-- 后续优先方向是工作区隔离、任务队列和更多发布渠道适配器，详见 [路线图](docs/roadmap.md)。
+- SQLite 工作区适合本地和小规模单机部署；PostgreSQL 当前仍是单库模型，不能直接作为多租户后端。
+- 后续优先方向是共享任务队列、团队权限、发布渠道适配器和质量评估，详见 [路线图](docs/roadmap.md)。
 
 ## 测试
 

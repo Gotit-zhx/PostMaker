@@ -15,14 +15,15 @@ from knowledge_base.local_repository import LocalContentRepository
 import os
 
 router = APIRouter(prefix="/api/v1/stats", tags=["stats"])
-_repo = ContentRepository() if os.getenv("POSTGRES_DSN") else LocalContentRepository()
+def _repo():
+    return ContentRepository() if os.getenv("POSTGRES_DSN") else LocalContentRepository()
 
 
 @router.get("/overview", response_model=StatsOverview)
 @cached_response(ttl=600, prefix="stats_overview")
 async def get_overview():
     """知识库整体统计概览（缓存 10 分钟）。"""
-    stats = await _repo.get_stats()
+    stats = await _repo().get_stats()
     return StatsOverview(
         total_items=stats["total_items"],
         by_type=stats["by_type"],
@@ -44,10 +45,11 @@ async def get_trending(
 ):
     """获取指定日期的热门内容排行。"""
     target_date = date_str
-    if target_date is None and isinstance(_repo, LocalContentRepository):
-        target_date = await _repo.get_latest_date()
+    repo = _repo()
+    if target_date is None and isinstance(repo, LocalContentRepository):
+        target_date = await repo.get_latest_date()
     target_date = target_date or date.today().isoformat()
-    rows = await _repo.get_trending(target_date, content_type=content_type, limit=limit)
+    rows = await repo.get_trending(target_date, content_type=content_type, limit=limit)
     items = [
         ContentItemSummary(
             id=r["id"],

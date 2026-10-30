@@ -10,15 +10,17 @@ from postmaker.core.models import Material
 
 
 class DataRadarClient:
-    def __init__(self, api_base: str = "http://localhost:8000", timeout: int = 15):
+    def __init__(self, api_base: str = "http://localhost:8000", timeout: int = 15,
+                 headers: Optional[Dict[str, str]] = None):
         self.api_base = api_base.rstrip("/")
         self.timeout = timeout
+        self.headers = dict(headers or {})
         self._client: Optional[httpx.AsyncClient] = None
 
     async def _get_client(self) -> httpx.AsyncClient:
         if self._client is None or self._client.is_closed:
             self._client = httpx.AsyncClient(
-                base_url=self.api_base, timeout=self.timeout
+                base_url=self.api_base, timeout=self.timeout, headers=self.headers
             )
         return self._client
 

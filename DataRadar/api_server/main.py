@@ -17,14 +17,17 @@ from __future__ import annotations
 
 import logging
 import os
+import hmac
 from contextlib import asynccontextmanager
 from typing import Optional
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from api_server.routers import content, knowledge, stats
 from api_server.routers import sources
+from dataradar.workspace import reset_workspace, set_workspace_id, workspace_signature
 
 logger = logging.getLogger(__name__)
 
@@ -113,6 +116,35 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+
+def _auth_required() -> bool:
+    return os.getenv("DATARADAR_AUTH_REQUIRED", "0").lower() in {"1", "true", "yes"}
+
+
+@app.middleware("http")
+async def workspace_auth(request: Request, call_next):
+    if not _auth_required() or request.url.path in {"/health", "/docs", "/openapi.json", "/redoc"}:
+        return await call_next(request)
+    if not request.url.path.startswith("/api/v1/"):
+        return await call_next(request)
+    if os.getenv("POSTGRES_DSN"):
+        return JSONResponse(
+            {"detail": "当前 PostgreSQL 存储尚未支持 workspace 隔离，请使用 SQLite 多用户模式"},
+            status_code=503,
+        )
+    workspace = request.headers.get("x-workspace-id", "")
+    signature = request.headers.get("x-workspace-signature", "")
+    if not workspace or not signature or not hmac.compare_digest(signature, workspace_signature(workspace)):
+        return JSONResponse({"detail": "工作区身份无效"}, status_code=401)
+    try:
+        token = set_workspace_id(workspace)
+    except ValueError:
+        return JSONResponse({"detail": "工作区身份无效"}, status_code=401)
+    try:
+        return await call_next(request)
+    finally:
+        reset_workspace(token)
 
 # 默认允许所有来源；生产环境可通过 ALLOWED_ORIGINS 环境变量收紧
 _origins = os.getenv("ALLOWED_ORIGINS", "*").split(",")
